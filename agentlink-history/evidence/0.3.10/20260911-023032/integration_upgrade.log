@@ -1,0 +1,11 @@
+test_039_capability_is_rejected_before_job_creation (__main__.UpgradeServiceTests.test_039_capability_is_rejected_before_job_creation) ... ok
+test_actual_034_settings_and_039_legacy_values_migrate (__main__.UpgradeTests.test_actual_034_settings_and_039_legacy_values_migrate) ... ok
+test_protocol2_and_protocol1_history_continue_without_mutation (__main__.UpgradeTests.test_protocol2_and_protocol1_history_continue_without_mutation) ... ok
+test_stale_turn_cannot_reset_activity_silence (__main__.UpgradeTests.test_stale_turn_cannot_reset_activity_silence) ... ok
+test_terminal_previous_heartbeat_allowed_but_other_running_job_rejected (__main__.UpgradeTests.test_terminal_previous_heartbeat_allowed_but_other_running_job_rejected) ... ok
+test_unfinished_export_and_status_label_restored (__main__.UpgradeTests.test_unfinished_export_and_status_label_restored) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.849s
+
+OK

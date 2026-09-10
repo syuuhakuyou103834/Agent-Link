@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+.venv/
+venv/
+runtime/
+dist/
+build-temp/
+test-output/
+auth.json
+credentials.json

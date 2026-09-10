@@ -1,0 +1,12 @@
+Completed jobs: 10
+Completed jobs: 20
+Completed jobs: 30
+Completed jobs: 40
+Completed jobs: 50
+Completed jobs: 60
+Completed jobs: 70
+Completed jobs: 80
+Completed jobs: 90
+Completed jobs: 100
+Completed jobs: 110
+PASS T19 local endurance: C:\AgentLink-integrated-0.3.10\source\test-output\end-fbe67df1 {'private_bytes': {'first_median': 37632000.0, 'last_median': 37660672.0, 'growth': 0.0007619047619047414}, 'handles': {'first_median': 307.0, 'last_median': 307.0, 'growth': 0.0}}

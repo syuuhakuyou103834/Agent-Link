@@ -1,0 +1,11 @@
+test_T05_pause_at_last_pre_send_pump (__main__.GapTests.test_T05_pause_at_last_pre_send_pump) ... ok
+test_T17_queued_old_cancel_does_not_cancel_new_active (__main__.GapTests.test_T17_queued_old_cancel_does_not_cancel_new_active) ... ok
+test_T11_claim_without_result_reports_uncertainty_zero_resend (__main__.GapTests.test_T11_claim_without_result_reports_uncertainty_zero_resend) ... ok
+test_T18_request_filename_must_match_step (__main__.GapTests.test_T18_request_filename_must_match_step) ... ok
+test_T18_invalid_indices_are_reported_not_silently_skipped (__main__.GapTests.test_T18_invalid_indices_are_reported_not_silently_skipped) ... ok
+test_T17_old_turn_events_same_thread_are_ignored (__main__.EventTests.test_T17_old_turn_events_same_thread_are_ignored) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.386s
+
+OK

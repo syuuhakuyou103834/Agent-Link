@@ -1,0 +1,1427 @@
+--- 0.3.9/app/__init__.py
++++ 0.3.10/app/__init__.py
+@@ -1,3 +1,3 @@
+ """AgentLink GUI: two independent Codex nodes, one local-network discussion."""
+ 
+-__version__ = "0.3.9"
++__version__ = "0.3.10"
+--- 0.3.9/app/context.py
++++ 0.3.10/app/context.py
+@@ -66,7 +66,8 @@
+     box.job(parent_job_id)  # Validate the ID before constructing any paths.
+     meta = box.get(parent_job_id, 'meta.json')
+     state = box.get(parent_job_id, 'state.json', {}) or {}
+-    if not isinstance(meta, dict) or meta.get('id') != parent_job_id or meta.get('protocol') != 1:
++    if (not isinstance(meta, dict) or meta.get('id') != parent_job_id
++            or type(meta.get('protocol')) is not int or meta['protocol'] not in (1, 2)):
+         raise ValueError('所选历史缺失或不兼容，未启动模型。')
+     if state.get('status') != 'completed':
+         raise ValueError('请先选择一场已完成的讨论；停止或失败的记录不能作为完整结论自动续接。')
+--- 0.3.9/app/engine.py
++++ 0.3.10/app/engine.py
+@@ -17,9 +17,9 @@
+ from . import __version__
+ from .context import FEATURE, prepare_context, load_context, prompt_context, check_prompt
+ from .storage import (Mailbox, FileLock, Settings, atomic_json, read_json, now,
+-                      turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES)
+-
+-SAFETY_FEATURE = 'agentlink-execution-lease-v3'
++                      turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES, LONG_TASK_FEATURE)
++
++SAFETY_FEATURE = 'agentlink-execution-lease-v4'
+ 
+ 
+ class NodeService:
+@@ -55,6 +55,7 @@
+         self.storage_warning = False
+         self.last_error_key = None
+         self.last_error_at = 0.
++        self.peer_seen = {}
+         self.thread = threading.Thread(target=self.run, name="AgentLink-node", daemon=True)
+ 
+     def start(self):
+@@ -168,7 +169,7 @@
+             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
+         features = peer.get('features') if isinstance(peer, dict) else None
+         if not isinstance(features, list) or SAFETY_FEATURE not in features:
+-            raise ValueError('对端协议不兼容或尚未连接：需要双方支持执行归属协议（0.3.9 起）。'
++            raise ValueError('对端协议不兼容或尚未连接：需要双方支持无时限执行归属协议（0.3.10 起）。'
+                              '未创建新场次或启动模型，请更新双方并连接。')
+         updated = peer.get('updated')
+         instance = peer.get('instance')
+@@ -242,6 +243,7 @@
+             except OSError:
+                 pass
+         self.connected = False
++        self.peer_seen.clear()
+         for lock in self.locks:
+             lock.close()
+         self.locks.clear()
+@@ -267,13 +269,45 @@
+     def _heartbeat(self, force=False):
+         if not self.box or not self.connected:
+             return
++        activity = self.client.activity_snapshot() if self.client and hasattr(self.client, 'activity_snapshot') else None
+         record = {"role": self.settings.role, "host": socket.gethostname(), "pid": os.getpid(),
+                   "instance": self.instance, "updated": now(), "status": self.status,
+                   "job_id": self.active["id"] if self.active else "",
+                   "workspace": self.workspace, "sandbox": self.settings.sandbox,
+                   "model": self.settings.model, "version": __version__, "capabilities": self.capabilities,
+-                  "features": [FEATURE, SAFETY_FEATURE]}
++                  "features": [FEATURE, SAFETY_FEATURE, LONG_TASK_FEATURE], "execution": activity}
+         atomic_json(self.box.root / "nodes" / (self.settings.role + ".json"), record)
++        self.emit('execution', {'role': self.settings.role, 'job_id': record['job_id'], 'execution': activity})
++
++    def _observe_peer(self, peer):
++        """Track heartbeat changes on this PC's monotonic clock, not peer wall time."""
++        if not isinstance(peer, dict):
++            return float('inf')
++        marker = (peer.get('instance'), peer.get('updated'))
++        stamp = time.monotonic()
++        if marker != self.peer_seen.get('marker') and peer.get('updated') is not None:
++            initial_age = 0
++            if not self.peer_seen:
++                try:
++                    initial_age = min(31, max(0, now() - peer['updated']))
++                except (TypeError, ValueError):
++                    return float('inf')
++            self.peer_seen = {'marker': marker, 'seen_at': stamp - initial_age}
++        return stamp - self.peer_seen.get('seen_at', stamp - 31)
++
++    def _check_peer_wait(self, job_id, role):
++        peer = read_json(self.box.root / 'nodes' / (role + '.json'), {}) or {}
++        age = self._observe_peer(peer)
++        if age > 30 or peer.get('status') == 'offline':
++            raise Cancelled('对方节点心跳已中断，执行状态无法确认；已停止本场且不自动重发请求。')
++        if peer.get('job_id') and peer['job_id'] != job_id:
++            other_id = peer['job_id']
++            # At a fast handoff the heartbeat can still name the prior completed
++            # job. Only a different nonterminal job proves conflicting activity.
++            if (not isinstance(other_id, str) or not JOB_PATTERN.fullmatch(other_id)
++                    or (self.box.get(other_id, 'state.json', {}) or {}).get('status') not in TERMINAL_STATES):
++                raise Cancelled('对方已切换场次，已停止等待旧任务。')
++        return peer
+ 
+     def _control(self):
+         if not self.active:
+@@ -292,7 +326,7 @@
+             if failure:
+                 kind = Cancelled if failure.get('status') == 'cancelled' else RuntimeError
+                 raise kind(role + " 节点：" + failure.get("message", "未知错误"))
+-        if self.active["expires"] < now():
++        if self.active.get('protocol') == 1 and self.active["expires"] < now():
+             raise Cancelled("讨论已超过有效时间。")
+         return control
+ 
+@@ -365,7 +399,7 @@
+                 self._heartbeat()
+                 peer_role = "B" if self.settings.role == "A" else "A"
+                 peer = read_json(self.box.root / "nodes" / (peer_role + ".json"), {}) or {}
+-                peer["online"] = bool(peer.get("updated") and now() - peer["updated"] < 12 and peer.get("status") != "offline")
++                peer["online"] = bool(peer.get("updated") and self._observe_peer(peer) < 12 and peer.get("status") != "offline")
+                 self.emit("peer", peer)
+                 self._sync_selected()
+             self.share_lost = None
+@@ -590,7 +624,7 @@
+         try:
+             self._assert_execution_idle()
+             peer_instance = self._check_peer_compatibility(expected_instance=_peer_instance)
+-            self.active = self.box.create(topic, rounds, self.settings.role, context=context)
++            self.active = self.box.create(topic, rounds, self.settings.role, context=context, unlimited=True)
+             self.active['participants'] = {self.settings.role:self.instance, self.peer_role:peer_instance}
+             self.box.put(self.active['id'], 'meta.json', self.active)
+             self.active_context = context
+@@ -610,18 +644,16 @@
+                 else:
+                     step = f"{index:03d}-{self.peer_role}"
+                     self.box.put(self.active["id"], "request-" + step + ".json",
+-                                 {"protocol": 1, "job_id": self.active["id"], "index": index,
++                                 {"protocol": self.active['protocol'], "job_id": self.active["id"], "index": index,
+                                   "prompt": prompt, "created": now(),
+                                   "context_sha256": (self.active.get('context') or {}).get('sha256')})
+-                    start = time.monotonic()
+                     while True:
+                         self._pump()
+                         view = self.box.get(self.active["id"], "turn-" + step + ".json")
+                         if view:
+                             self.box.validate_turn(view, self.active['id'], index, self.peer_role)
+                             break
+-                        if time.monotonic() - start > 1200:
+-                            raise TimeoutError("等待对方超时，请检查另一台节点是否在线。")
++                        self._check_peer_wait(self.active['id'], self.peer_role)
+                         time.sleep(0.15)
+                 turns.append(view)
+                 self._sync_selected()
+@@ -693,14 +725,13 @@
+         self.emit('new_job', meta)
+         try:
+             self.active_context = load_context(self.box, meta)
++            self._heartbeat(force=True)
+             while True:
+-                self._pump()
+                 state = self.box.get(job_id, 'state.json', {}) or {}
+                 if state.get('status') in ('completed', 'failed', 'cancelled'):
+                     break
+-                peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
+-                if now() - peer.get('updated', 0) > 30:
+-                    raise Cancelled('发起节点已断开，停止接收新步骤。')
++                self._pump()
++                self._check_peer_wait(job_id, self.peer_role)
+                 if not self._control().get('paused'):
+                     self._receive_step(root, meta)
+                 time.sleep(.15)
+@@ -721,7 +752,7 @@
+         for path in sorted(root.glob('request-*-' + self.settings.role + '.json')):
+             request = read_json(path, None, limit=1024 * 1024)
+             if (not isinstance(request, dict) or type(request.get('protocol')) is not int
+-                    or request['protocol'] != 1 or request.get('job_id') != job_id):
++                    or request['protocol'] != meta['protocol'] or request.get('job_id') != job_id):
+                 raise ValueError('不兼容的步骤请求，未启动模型。')
+             index = request.get("index")
+             if type(index) is not int or index % 2 != 1 or not 1 <= index < meta["rounds"] * 2:
+--- 0.3.9/app/protocol.py
++++ 0.3.10/app/protocol.py
+@@ -137,6 +137,9 @@
+         self.log = None
+         self.log_lock = threading.Lock()
+         self.readers = []
++        self.turn_started_at = None
++        self.last_turn_event_at = None
++        self.turn_event_count = 0
+ 
+     def start(self):
+         if self.cleanup_pending:
+@@ -217,10 +220,10 @@
+ 
+     def call(self, method, params, timeout=40):
+         request_id = self.request(method, params)
+-        deadline = time.monotonic() + timeout
++        deadline = None if timeout is None else time.monotonic() + timeout
+         while request_id not in self.responses:
+             self.pump()
+-            if time.monotonic() > deadline:
++            if deadline is not None and time.monotonic() > deadline:
+                 raise TimeoutError("Codex 接口超时：" + method)
+             self.poll(0.1)
+         response = self.responses.pop(request_id)
+@@ -249,8 +252,31 @@
+                 # Bind the response ID before accepting any turn content.
+                 self.pending_turn_events.append((method, params))
+                 return
+-            self.current.feed(method, params)
++            self._feed_current(method, params)
++
++    def _feed_current(self, method, params):
++        before = self.current.revision
++        self.current.feed(method, params)
++        if self.current.revision != before:
++            self.last_turn_event_at = time.monotonic()
++            self.turn_event_count += 1
+             self.changed(self.current.snapshot())
++
++    def activity_snapshot(self):
++        if self.current is None or self.turn_started_at is None:
++            return None
++        stamp = time.monotonic()
++        silence = max(0, stamp - (self.last_turn_event_at or self.turn_started_at))
++        running_tools = sum(t.get('status') in ('inProgress', 'running', 'started')
++                            for t in self.current.tools.values())
++        alive = bool(self.process and self.process.poll() is None)
++        phase = ('process_exited' if not alive else
++                 'tool_running' if running_tools else
++                 'quiet' if silence >= 60 else 'working')
++        return {'step': self.current.step, 'turn_id': self.current.turn_id,
++                'phase': phase, 'process_alive': alive, 'running_tools': running_tools,
++                'elapsed_seconds': int(max(0, stamp - self.turn_started_at)),
++                'event_age_seconds': int(silence), 'event_count': self.turn_event_count}
+ 
+     def _server_request(self, message):
+         method = message["method"]
+@@ -311,7 +337,8 @@
+             raise RuntimeError('执行进程清理未完成，禁止发送新请求。')
+         self.current = TurnView(role, step, thread_id)
+         self.changed, self.pump = changed, pump
+-        started = time.monotonic()
++        self.turn_started_at = self.last_turn_event_at = time.monotonic()
++        self.turn_event_count = 0
+         cancelled_at = None
+         reason = ""
+         try:
+@@ -319,18 +346,16 @@
+                 "threadId": thread_id, "input": [{"type": "text", "text": prompt}],
+                 "model": settings["model"], "effort": settings.get("effort", "high"),
+                 "summary": "auto",
+-            }, timeout=90)
++            }, timeout=None)
+             self.current.turn_id = response["turn"]["id"]
+             for method, params in self.pending_turn_events:
+-                self.current.feed(method, params)
++                self._feed_current(method, params)
+             self.pending_turn_events.clear()
+             self.changed(self.current.snapshot())
+             while self.current.status not in ("completed", "failed", "interrupted"):
+                 if cancelled_at is None:
+                     try:
+                         self.pump()
+-                        if time.monotonic() - started > settings.get("timeout_seconds", 900):
+-                            raise Cancelled("当前调用超时，正在停止。")
+                     except Cancelled as error:
+                         reason = str(error)
+                         cancelled_at = time.monotonic()
+@@ -357,6 +382,7 @@
+             raise
+         finally:
+             self.current = None
++            self.turn_started_at = self.last_turn_event_at = None
+             self.pending_turn_events.clear()
+             self.pump = lambda: None
+             self.changed = lambda value: None
+--- 0.3.9/app/storage.py
++++ 0.3.10/app/storage.py
+@@ -16,6 +16,7 @@
+ DEFAULT_SHARE = r"\\192.168.1.108\shared\AgentLink-GUI-v1"
+ JOB_PATTERN = re.compile(r"^\d{8}-\d{6}-[a-f0-9]{32}$")
+ TERMINAL_STATES = frozenset(('completed', 'failed', 'cancelled'))
++LONG_TASK_FEATURE = 'unlimited-wait-v1'
+ IO_RETRY_SECONDS = 1.5
+ log = logging.getLogger('agentlink.storage')
+ 
+@@ -233,7 +234,7 @@
+     workspace: str = ""
+     sandbox: str = "read-only"
+     tools: str = "configured"
+-    timeout_seconds: int = 900
++    timeout_seconds: int = 0  # Legacy settings are migrated to unlimited task waiting.
+     auto_connect: bool = True
+ 
+     @classmethod
+@@ -258,8 +259,7 @@
+             raise ValueError("工具模式无效")
+         if not isinstance(self.shared_root, str) or not self.shared_root:
+             raise ValueError("请选择共享目录")
+-        if not 30 <= int(self.timeout_seconds) <= 3600:
+-            raise ValueError("单次超时应在 30 到 3600 秒之间")
++        self.timeout_seconds = 0
+ 
+     def save(self, data_dir):
+         self.validate()
+@@ -288,7 +288,7 @@
+         result.mkdir(parents=True, exist_ok=True)
+         return result
+ 
+-    def create(self, topic, rounds, initiator="A", context=None):
++    def create(self, topic, rounds, initiator="A", context=None, unlimited=False):
+         if not isinstance(topic, str) or not topic.strip() or len(topic) > 24000:
+             raise ValueError("议题应为 1 到 24000 个字符")
+         if type(rounds) is not int or not 1 <= rounds <= 8:
+@@ -296,6 +296,8 @@
+         job_id = new_job_id()
+         meta = {"protocol": 1, "id": job_id, "topic": topic, "rounds": rounds,
+                 "created": now(), "expires": now() + (1 + 2 * rounds) * 1800, "initiator": initiator}
++        if unlimited:
++            meta.update(protocol=2, expires=None, wait_policy='unlimited')
+         if context is not None:
+             from .context import validate_context, context_hash
+             validate_context(context)
+@@ -353,7 +355,7 @@
+ 
+     def validate_meta(self, meta, job_id):
+         if (not isinstance(meta, dict) or type(meta.get("protocol")) is not int
+-                or meta["protocol"] != 1 or meta.get("id") != job_id):
++                or meta["protocol"] not in (1, 2) or meta.get("id") != job_id):
+             raise ValueError("不兼容的任务记录")
+         if not isinstance(meta.get("topic"), str) or not meta['topic'].strip() or len(meta["topic"]) > 24000:
+             raise ValueError("议题内容无效")
+@@ -362,6 +364,10 @@
+         if meta.get("initiator") not in ("A", "B"):
+             raise ValueError("发起节点无效")
+         expires = meta.get('expires')
++        if meta['protocol'] == 2:
++            if 'expires' not in meta or expires is not None or meta.get('wait_policy') != 'unlimited':
++                raise ValueError('无时限任务记录无效')
++            return
+         if type(expires) not in (int, float) or not math.isfinite(expires):
+             raise ValueError('任务有效时间必须是有限数值')
+         if expires < now():
+--- 0.3.9/app/ui.py
++++ 0.3.10/app/ui.py
+@@ -109,8 +109,8 @@
+         self.tools.addItem('文字讨论，不主动使用工具', 'discussion')
+         self.tools.setCurrentIndex(max(0, self.tools.findData(settings.tools)))
+         form.addRow('技能和插件', self.tools)
+-        self.timeout = W.QSpinBox(); self.timeout.setRange(1, 60); self.timeout.setSuffix(' 分钟')
+-        self.timeout.setValue(max(1, settings.timeout_seconds // 60)); form.addRow('单次调用超时', self.timeout)
++        wait_note = W.QLabel('不限制总时长；执行中持续等待并同步活动状态。\n长时间无新事件会提示，可随时手动停止。')
++        wait_note.setWordWrap(True); form.addRow('任务等待', wait_note)
+         self.auto = W.QCheckBox('打开程序时自动连接节点'); self.auto.setChecked(settings.auto_connect)
+         form.addRow('', self.auto)
+         note = W.QLabel('只读沙盒限制本地写入；它不等于禁用所有外部工具。额外权限请求不会自动批准。\n更改设置会断开节点，保存后重新连接生效。')
+@@ -134,7 +134,7 @@
+         value = Settings(role=self.role.currentText(), shared_root=self.share.text().strip(),
+             codex=self.codex.text().strip(), model=self.model.text().strip(), effort=self.effort.currentText(),
+             workspace=self.workspace.text().strip(), sandbox=self.sandbox.currentData(), tools=self.tools.currentData(),
+-            timeout_seconds=self.timeout.value() * 60, auto_connect=self.auto.isChecked())
++            timeout_seconds=0, auto_connect=self.auto.isChecked())
+         value.validate()
+         if not value.model:
+             raise ValueError('请填写模型名称。')
+@@ -226,6 +226,10 @@
+         main.addLayout(row)
+         self.context_hint = W.QLabel('新建独立讨论，不携带其他记录。'); self.context_hint.setObjectName('muted')
+         self.context_hint.setWordWrap(True); main.addWidget(self.context_hint)
++        self.execution_label = W.QLabel('任务不限总时长；连接后显示双方活动。')
++        self.execution_label.setObjectName('muted'); self.execution_label.setWordWrap(True)
++        main.addWidget(self.execution_label)
++        self.execution = {}
+         self.prompt = W.QPlainTextEdit(); self.prompt.setPlaceholderText('输入议题或补充要求…\nEnter 换行，Ctrl + Enter 发起讨论。'); self.prompt.setFixedHeight(96)
+         main.addWidget(self.prompt)
+         controls = W.QHBoxLayout()
+@@ -308,6 +312,11 @@
+             self.peer = value
+             self.peer_badge.setText('节点 ' + ('B' if self.settings.role == 'A' else 'A') + (' · 在线' if value.get('online') else ' · 离线'))
+             self.render_capabilities()
++            self.execution['B' if self.settings.role == 'A' else 'A'] = value
++            self.render_execution()
++        elif kind == 'execution':
++            self.execution[value['role']] = value
++            self.render_execution()
+         elif kind == 'new_job':
+             self.selection_pending = None
+             self.view_job_id = value['id']
+@@ -438,6 +447,7 @@
+         count, total = len(complete), 1 + 2 * meta.get('rounds', 1)
+         self.progress.setRange(0, total); self.progress.setValue(count)
+         self.state_label.setText((STATUS.get(status, status) + ' · ' + str(count) + ' / ' + str(total) + ' 次调用') if meta else '新讨论')
++        self.render_execution()
+         self.update_buttons()
+ 
+     def render_capabilities(self):
+@@ -450,6 +460,32 @@
+                 parts.append('<p>读取提示：' + text_html('\n'.join(cap['errors'])) + '</p>')
+         set_html(self.cap_view, ''.join(parts))
+ 
++    def render_execution(self):
++        if self.snapshot.get('status') in ('completed', 'failed', 'cancelled'):
++            self.execution_label.setText('本场' + STATUS[self.snapshot['status']] + '；新任务不限制总时长。')
++            return
++        lines = []
++        job_id = self.snapshot.get('meta', {}).get('id')
++        for role, node in self.execution.items():
++            info = node.get('execution')
++            if not info or node.get('job_id') != job_id:
++                continue
++            seconds = info.get('elapsed_seconds', 0)
++            phase = info.get('phase')
++            if node.get('online') is False:
++                state = '心跳暂未更新，执行状态无法确认'
++            elif phase == 'process_exited':
++                state = '执行进程已退出，等待错误记录'
++            elif phase == 'tool_running':
++                state = '工具执行中；继续等待'
++            elif phase == 'quiet':
++                state = '进程仍在，暂时无法确认新进展；继续等待，可手动停止'
++            else:
++                state = '任务执行中；继续等待'
++            lines.append('节点 ' + role + ' · ' + state + ' · 已运行 %d分%02d秒，最近事件距今 %d秒'
++                         % (seconds // 60, seconds % 60, info.get('event_age_seconds', 0)))
++        self.execution_label.setText('\n'.join(lines) or '任务不限总时长；等待下一步活动。')
++
+     def final_text(self):
+         turns = self.snapshot.get('turns', [])
+         return turns[-1].get('answer', '') if turns else ''
+@@ -463,7 +499,16 @@
+             return
+         path = W.QFileDialog.getSaveFileName(self, '导出完整讨论', 'AgentLink-discussion.txt', '文本 (*.txt);;Markdown (*.md)')[0]
+         if path:
+-            self.save_text(path, self.snapshot.get('report') or report_text(self.snapshot['meta'], self.snapshot.get('turns', []), self.snapshot.get('context')))
++            turns = list(self.snapshot.get('turns', []))
++            steps = {t['step'] for t in turns}
++            for live in self.snapshot.get('live', []):
++                if live['step'] not in steps:
++                    partial = dict(live)
++                    blocks = live.get('blocks') or [{'text': live.get('answer', '')}]
++                    partial['answer'] = '【未完成输出，仅作恢复线索】\n' + '\n\n'.join(b.get('text', '') for b in blocks)
++                    turns.append(partial)
++            turns.sort(key=lambda t: t.get('index', 0))
++            self.save_text(path, self.snapshot.get('report') or report_text(self.snapshot['meta'], turns, self.snapshot.get('context')))
+ 
+     def export_handoff(self):
+         if not self.final_text():
+--- 0.3.9/DEBUG-0.3.10.md
++++ 0.3.10/DEBUG-0.3.10.md
+@@ -0,0 +1,17 @@
++# AgentLink 0.3.10 整合说明
++
++以冻结 0.3.9 运行源码为基础，恢复 0.3.4 的长任务能力；原 0.3.4 与 0.3.9 文件保留。
++
++恢复内容：模型请求和 turn/start 等待不设 AgentLink 总时长上限；新讨论使用协议 2、expires=null；移除等待对方 20 分钟上限；恢复运行时长、最近事件、工具状态及静默提示；恢复未完成公开输出和对应本机任务 ID 导出；兼容协议 1/2 已完成历史；旧 timeout_seconds 字段迁移为 0，保留其余设置。
++
++保留 0.3.9 的 Windows Job 宿主/执行进程保护、暂停创建和归属后恢复、清理失败留存句柄及共享 execution.lease、双方实例绑定、严格心跳时效和角色锁验证、请求编号和补充编号去重、旧轮次事件过滤、暂停发送边界、严格步骤与结果校验、小文件分块读取和场次会话映射清理。
++
++新能力标志为 agentlink-execution-lease-v4。双方须更新后发起新任务；0.3.4/0.3.9 已完成历史可以迁移，但其节点不能参加新版本的活动讨论。旧程序不受新程序拒绝规则约束，因此不要混用活动节点。
++
++长等待不等于忽略故障：明确接口错误、进程退出、用户停止/退出、对端实例或角色锁失效、共享持续故障仍会停止；非模型管理接口仍有通信超时。在线显示恢复本机单调时钟观察，执行准入继续保留严格时效要求，两机应保持系统时间同步。
++
++整合时补修快速切换讨论的心跳滞后：前一场已终结但心跳尚未更新时，不再误判对方切换到其他活动场次。接收新场次即发布心跳；另一场仍为非终态时继续拒绝。
++
++测试恢复 test_waiting.py；增加由 0.3.4 实际 Settings.save/Mailbox.create 生成的迁移样本、部分导出、旧事件不得伪造活动进展、旧能力拒绝及终态心跳切换检查。旧“本机调用限时”故障测试改为明确的上游超时错误，未删掉错误处理和不重发验证。
++
++测试与构建证据在整合工作目录的 evidence 中。结果按实际日志记录，不能替代真实双机、真实 SMB 和各节点实际权限验收。新包独立交付，不自动替换正在运行的安装。
+--- 0.3.9/packaging/Launcher.cs
++++ 0.3.10/packaging/Launcher.cs
+@@ -1,25 +1,25 @@
+-using System;
+-using System.IO;
+-using System.Diagnostics;
+-using System.Windows.Forms;
+-using System.Reflection;
+-[assembly: AssemblyTitle("AgentLink GUI")]
+-[assembly: AssemblyVersion("0.3.9.0")]
+-internal static class Launcher {
+-    [STAThread] static void Main(string[] args) {
+-        try {
+-            string root = AppDomain.CurrentDomain.BaseDirectory;
+-            var info = new ProcessStartInfo(Path.Combine(root, "runtime", "pythonw.exe"));
+-            info.Arguments = "\"" + Path.Combine(root, "main.py") + "\"";
+-            // The installer passes only a validated first-run role.
+-            if (args.Length == 2 && args[0] == "--role" && (args[1] == "A" || args[1] == "B"))
+-                info.Arguments += " --role " + args[1];
+-            info.WorkingDirectory = root;
+-            info.UseShellExecute = false;
+-            info.CreateNoWindow = true;
+-            using (Process process = Process.Start(info)) { process.WaitForExit(); }
+-        } catch (Exception error) {
+-            MessageBox.Show(error.Message, "AgentLink 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+-        }
+-    }
+-}
++using System;
++using System.IO;
++using System.Diagnostics;
++using System.Windows.Forms;
++using System.Reflection;
++[assembly: AssemblyTitle("AgentLink GUI")]
++[assembly: AssemblyVersion("0.3.10.0")]
++internal static class Launcher {
++    [STAThread] static void Main(string[] args) {
++        try {
++            string root = AppDomain.CurrentDomain.BaseDirectory;
++            var info = new ProcessStartInfo(Path.Combine(root, "runtime", "pythonw.exe"));
++            info.Arguments = "\"" + Path.Combine(root, "main.py") + "\"";
++            // The installer passes only a validated first-run role.
++            if (args.Length == 2 && args[0] == "--role" && (args[1] == "A" || args[1] == "B"))
++                info.Arguments += " --role " + args[1];
++            info.WorkingDirectory = root;
++            info.UseShellExecute = false;
++            info.CreateNoWindow = true;
++            using (Process process = Process.Start(info)) { process.WaitForExit(); }
++        } catch (Exception error) {
++            MessageBox.Show(error.Message, "AgentLink 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
++        }
++    }
++}
+--- 0.3.9/packaging/Setup.cs
++++ 0.3.10/packaging/Setup.cs
+@@ -1,138 +1,138 @@
+-using System;
+-using System.IO;
+-using System.IO.Compression;
+-using System.Reflection;
+-using System.Security.Cryptography;
+-using System.Drawing;
+-using System.Diagnostics;
+-using System.Windows.Forms;
+-using System.ComponentModel;
+-[assembly: AssemblyTitle("AgentLink GUI Setup")]
+-[assembly: AssemblyDescription("PyQt5 two-PC collaboration installer")]
+-[assembly: AssemblyVersion("0.3.6.0")]
+-internal static class Package {
+-    const string ExpectedHash = "PAYLOAD_HASH";
+-    internal static void Extract(string target) {
+-        target = Path.GetFullPath(target);
+-        Directory.CreateDirectory(target);
+-        using (Stream input = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"))
+-        using (MemoryStream data = new MemoryStream()) {
+-            input.CopyTo(data);
+-            using (SHA256 hash = SHA256.Create()) {
+-                string actual = BitConverter.ToString(hash.ComputeHash(data.ToArray())).Replace("-", "");
+-                if (actual != ExpectedHash) throw new InvalidDataException("安装包完整性校验失败。");
+-            }
+-            data.Position = 0;
+-            using (ZipArchive zip = new ZipArchive(data, ZipArchiveMode.Read)) {
+-                foreach (ZipArchiveEntry entry in zip.Entries) {
+-                    string file = Path.GetFullPath(Path.Combine(target, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
+-                    if (!file.StartsWith(target.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+-                        throw new InvalidDataException("安装路径无效。");
+-                    Directory.CreateDirectory(Path.GetDirectoryName(file));
+-                    if (String.IsNullOrEmpty(entry.Name)) continue;
+-                    using (Stream source = entry.Open())
+-                    using (Stream output = new FileStream(file, FileMode.Create, FileAccess.Write)) source.CopyTo(output);
+-                }
+-            }
+-        }
+-    }
+-    internal static void Shortcut(string path, string target, string role) {
+-        Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+-        object shell = Activator.CreateInstance(shellType);
+-        object link = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { path });
+-        Type type = link.GetType();
+-        type.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { target });
+-        type.InvokeMember("Arguments", BindingFlags.SetProperty, null, link, new object[] { "--role " + role });
+-        type.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { Path.GetDirectoryName(target) });
+-        type.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { "AgentLink PyQt5 双机协作" });
+-        type.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
+-        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(link);
+-        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+-    }
+-}
+-internal sealed class SetupWindow : Form {
+-    readonly RadioButton roleA = new RadioButton(), roleB = new RadioButton();
+-    readonly Button install = new Button(), launch = new Button();
+-    readonly Label status = new Label();
+-    readonly ProgressBar progress = new ProgressBar();
+-    string installedPath;
+-    bool working;
+-    internal SetupWindow() {
+-        Text = "AgentLink GUI · 安装";
+-        Font = new Font("Microsoft YaHei UI", 10F);
+-        ClientSize = new Size(660, 435); FormBorderStyle = FormBorderStyle.FixedDialog;
+-        MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
+-        BackColor = Color.FromArgb(244, 246, 250);
+-        Controls.Add(new Label { Text = "AgentLink GUI", Font = new Font(Font.FontFamily, 24F, FontStyle.Bold), ForeColor = Color.FromArgb(32, 63, 102), Location = new Point(30, 25), AutoSize = true });
+-        Controls.Add(new Label { Text = "PyQt5 界面 · 双向控制 · 多轮讨论 · 中文实时输出", Location = new Point(32, 80), AutoSize = true });
+-        Controls.Add(new Label { Text = "本机节点（两台电脑分别选择不同节点）", Location = new Point(32, 130), AutoSize = true });
+-        roleA.Text = "A · ZHOUBY"; roleA.SetBounds(35, 163, 240, 30);
+-        roleB.Text = "B · WILLDESKTOP"; roleB.SetBounds(315, 163, 285, 30);
+-        roleB.Checked = Environment.MachineName.Equals("WILLDESKTOP", StringComparison.OrdinalIgnoreCase);
+-        roleA.Checked = !roleB.Checked; Controls.Add(roleA); Controls.Add(roleB);
+-        Controls.Add(new Label { Text = "已内置 Python 3.13 与 PyQt5，无需另装 Python。\n使用本机已经登录的 Codex；首次启动可调整共享目录和权限。\n程序按当前用户安装，旧版讨论记录保留。", Location = new Point(32, 217), Size = new Size(600, 83) });
+-        status.Text = "准备安装。"; status.SetBounds(32, 312, 600, 34); Controls.Add(status);
+-        progress.SetBounds(32, 349, 600, 8); Controls.Add(progress);
+-        install.Text = "安装到本机"; install.SetBounds(310, 379, 150, 36); install.Click += BeginInstall; Controls.Add(install);
+-        launch.Text = "打开 AgentLink"; launch.SetBounds(475, 379, 157, 36); launch.Enabled = false;
+-        launch.Click += delegate { Process.Start(new ProcessStartInfo(installedPath, "--role " + (roleA.Checked ? "A" : "B")) { UseShellExecute = true }); Close(); };
+-        Controls.Add(launch);
+-        FormClosing += delegate(object sender, FormClosingEventArgs e) { if (working) e.Cancel = true; };
+-    }
+-    void BeginInstall(object sender, EventArgs e) {
+-        string role = roleA.Checked ? "A" : "B";
+-        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+-        string target = Path.Combine(local, "Programs", "AgentLinkGUI");
+-        string userData = Path.Combine(local, "AgentLinkGUI");
+-        install.Enabled = roleA.Enabled = roleB.Enabled = false; working = true;
+-        status.Text = "正在校验和安装内置运行环境…"; progress.Style = ProgressBarStyle.Marquee;
+-        BackgroundWorker worker = new BackgroundWorker();
+-        worker.DoWork += delegate {
+-            Directory.CreateDirectory(userData);
+-            using (FileStream guard = new FileStream(Path.Combine(userData, "gui.lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
+-                Package.Extract(target);
+-                installedPath = Path.Combine(target, "AgentLink.exe");
+-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+-                string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "AgentLink GUI");
+-                Directory.CreateDirectory(menu);
+-                Package.Shortcut(Path.Combine(desktop, "AgentLink GUI.lnk"), installedPath, role);
+-                Package.Shortcut(Path.Combine(menu, "AgentLink GUI.lnk"), installedPath, role);
+-            }
+-        };
+-        worker.RunWorkerCompleted += delegate(object s, RunWorkerCompletedEventArgs done) {
+-            working = false; progress.Style = ProgressBarStyle.Blocks;
+-            if (done.Error != null) {
+-                status.Text = "安装未完成。"; install.Enabled = roleA.Enabled = roleB.Enabled = true;
+-                MessageBox.Show(this, done.Error.Message + "\n\n若程序已打开，请先关闭后重试。", "安装失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+-            } else { progress.Value = 100; status.Text = "安装完成，已创建桌面快捷方式。"; launch.Enabled = true; }
+-        };
+-        worker.RunWorkerAsync();
+-    }
+-}
+-internal static class Program {
+-    [STAThread] static int Main(string[] args) {
+-        try {
+-            if (args.Length == 2 && args[0] == "--extract") { Package.Extract(args[1]); return 0; }
+-            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+-            if (args.Length == 2 && args[0] == "--preview") {
+-                using (SetupWindow preview = new SetupWindow()) {
+-                    preview.ShowInTaskbar = false; preview.StartPosition = FormStartPosition.Manual;
+-                    preview.Location = new Point(-32000, -32000); preview.Show(); Application.DoEvents();
+-                    using (Bitmap bitmap = new Bitmap(preview.Width, preview.Height)) {
+-                        preview.DrawToBitmap(bitmap, new Rectangle(Point.Empty, preview.Size));
+-                        bitmap.Save(Path.GetFullPath(args[1]));
+-                    }
+-                    preview.Close();
+-                }
+-                return 0;
+-            }
+-            Application.Run(new SetupWindow()); return 0;
+-        } catch (Exception error) {
+-            if (args.Length == 2 && args[0] == "--extract") {
+-                try { File.WriteAllText(Path.Combine(Path.GetFullPath(args[1]), "extract-error.txt"), error.ToString()); } catch { }
+-                Console.Error.WriteLine(error); return 1;
+-            }
+-            MessageBox.Show(error.Message, "AgentLink 安装失败"); return 1;
+-        }
+-    }
+-}
++using System;
++using System.IO;
++using System.IO.Compression;
++using System.Reflection;
++using System.Security.Cryptography;
++using System.Drawing;
++using System.Diagnostics;
++using System.Windows.Forms;
++using System.ComponentModel;
++[assembly: AssemblyTitle("AgentLink GUI Setup")]
++[assembly: AssemblyDescription("PyQt5 two-PC collaboration installer")]
++[assembly: AssemblyVersion("0.3.6.0")]
++internal static class Package {
++    const string ExpectedHash = "PAYLOAD_HASH";
++    internal static void Extract(string target) {
++        target = Path.GetFullPath(target);
++        Directory.CreateDirectory(target);
++        using (Stream input = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"))
++        using (MemoryStream data = new MemoryStream()) {
++            input.CopyTo(data);
++            using (SHA256 hash = SHA256.Create()) {
++                string actual = BitConverter.ToString(hash.ComputeHash(data.ToArray())).Replace("-", "");
++                if (actual != ExpectedHash) throw new InvalidDataException("安装包完整性校验失败。");
++            }
++            data.Position = 0;
++            using (ZipArchive zip = new ZipArchive(data, ZipArchiveMode.Read)) {
++                foreach (ZipArchiveEntry entry in zip.Entries) {
++                    string file = Path.GetFullPath(Path.Combine(target, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
++                    if (!file.StartsWith(target.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
++                        throw new InvalidDataException("安装路径无效。");
++                    Directory.CreateDirectory(Path.GetDirectoryName(file));
++                    if (String.IsNullOrEmpty(entry.Name)) continue;
++                    using (Stream source = entry.Open())
++                    using (Stream output = new FileStream(file, FileMode.Create, FileAccess.Write)) source.CopyTo(output);
++                }
++            }
++        }
++    }
++    internal static void Shortcut(string path, string target, string role) {
++        Type shellType = Type.GetTypeFromProgID("WScript.Shell");
++        object shell = Activator.CreateInstance(shellType);
++        object link = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { path });
++        Type type = link.GetType();
++        type.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { target });
++        type.InvokeMember("Arguments", BindingFlags.SetProperty, null, link, new object[] { "--role " + role });
++        type.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { Path.GetDirectoryName(target) });
++        type.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { "AgentLink PyQt5 双机协作" });
++        type.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
++        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(link);
++        System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
++    }
++}
++internal sealed class SetupWindow : Form {
++    readonly RadioButton roleA = new RadioButton(), roleB = new RadioButton();
++    readonly Button install = new Button(), launch = new Button();
++    readonly Label status = new Label();
++    readonly ProgressBar progress = new ProgressBar();
++    string installedPath;
++    bool working;
++    internal SetupWindow() {
++        Text = "AgentLink GUI · 安装";
++        Font = new Font("Microsoft YaHei UI", 10F);
++        ClientSize = new Size(660, 435); FormBorderStyle = FormBorderStyle.FixedDialog;
++        MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
++        BackColor = Color.FromArgb(244, 246, 250);
++        Controls.Add(new Label { Text = "AgentLink GUI", Font = new Font(Font.FontFamily, 24F, FontStyle.Bold), ForeColor = Color.FromArgb(32, 63, 102), Location = new Point(30, 25), AutoSize = true });
++        Controls.Add(new Label { Text = "PyQt5 界面 · 双向控制 · 多轮讨论 · 中文实时输出", Location = new Point(32, 80), AutoSize = true });
++        Controls.Add(new Label { Text = "本机节点（两台电脑分别选择不同节点）", Location = new Point(32, 130), AutoSize = true });
++        roleA.Text = "A · ZHOUBY"; roleA.SetBounds(35, 163, 240, 30);
++        roleB.Text = "B · WILLDESKTOP"; roleB.SetBounds(315, 163, 285, 30);
++        roleB.Checked = Environment.MachineName.Equals("WILLDESKTOP", StringComparison.OrdinalIgnoreCase);
++        roleA.Checked = !roleB.Checked; Controls.Add(roleA); Controls.Add(roleB);
++        Controls.Add(new Label { Text = "已内置 Python 3.13 与 PyQt5，无需另装 Python。\n使用本机已经登录的 Codex；首次启动可调整共享目录和权限。\n程序按当前用户安装，旧版讨论记录保留。", Location = new Point(32, 217), Size = new Size(600, 83) });
++        status.Text = "准备安装。"; status.SetBounds(32, 312, 600, 34); Controls.Add(status);
++        progress.SetBounds(32, 349, 600, 8); Controls.Add(progress);
++        install.Text = "安装到本机"; install.SetBounds(310, 379, 150, 36); install.Click += BeginInstall; Controls.Add(install);
++        launch.Text = "打开 AgentLink"; launch.SetBounds(475, 379, 157, 36); launch.Enabled = false;
++        launch.Click += delegate { Process.Start(new ProcessStartInfo(installedPath, "--role " + (roleA.Checked ? "A" : "B")) { UseShellExecute = true }); Close(); };
++        Controls.Add(launch);
++        FormClosing += delegate(object sender, FormClosingEventArgs e) { if (working) e.Cancel = true; };
++    }
++    void BeginInstall(object sender, EventArgs e) {
++        string role = roleA.Checked ? "A" : "B";
++        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
++        string target = Path.Combine(local, "Programs", "AgentLinkGUI");
++        string userData = Path.Combine(local, "AgentLinkGUI");
++        install.Enabled = roleA.Enabled = roleB.Enabled = false; working = true;
++        status.Text = "正在校验和安装内置运行环境…"; progress.Style = ProgressBarStyle.Marquee;
++        BackgroundWorker worker = new BackgroundWorker();
++        worker.DoWork += delegate {
++            Directory.CreateDirectory(userData);
++            using (FileStream guard = new FileStream(Path.Combine(userData, "gui.lease"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
++                Package.Extract(target);
++                installedPath = Path.Combine(target, "AgentLink.exe");
++                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
++                string menu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "AgentLink GUI");
++                Directory.CreateDirectory(menu);
++                Package.Shortcut(Path.Combine(desktop, "AgentLink GUI.lnk"), installedPath, role);
++                Package.Shortcut(Path.Combine(menu, "AgentLink GUI.lnk"), installedPath, role);
++            }
++        };
++        worker.RunWorkerCompleted += delegate(object s, RunWorkerCompletedEventArgs done) {
++            working = false; progress.Style = ProgressBarStyle.Blocks;
++            if (done.Error != null) {
++                status.Text = "安装未完成。"; install.Enabled = roleA.Enabled = roleB.Enabled = true;
++                MessageBox.Show(this, done.Error.Message + "\n\n若程序已打开，请先关闭后重试。", "安装失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
++            } else { progress.Value = 100; status.Text = "安装完成，已创建桌面快捷方式。"; launch.Enabled = true; }
++        };
++        worker.RunWorkerAsync();
++    }
++}
++internal static class Program {
++    [STAThread] static int Main(string[] args) {
++        try {
++            if (args.Length == 2 && args[0] == "--extract") { Package.Extract(args[1]); return 0; }
++            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
++            if (args.Length == 2 && args[0] == "--preview") {
++                using (SetupWindow preview = new SetupWindow()) {
++                    preview.ShowInTaskbar = false; preview.StartPosition = FormStartPosition.Manual;
++                    preview.Location = new Point(-32000, -32000); preview.Show(); Application.DoEvents();
++                    using (Bitmap bitmap = new Bitmap(preview.Width, preview.Height)) {
++                        preview.DrawToBitmap(bitmap, new Rectangle(Point.Empty, preview.Size));
++                        bitmap.Save(Path.GetFullPath(args[1]));
++                    }
++                    preview.Close();
++                }
++                return 0;
++            }
++            Application.Run(new SetupWindow()); return 0;
++        } catch (Exception error) {
++            if (args.Length == 2 && args[0] == "--extract") {
++                try { File.WriteAllText(Path.Combine(Path.GetFullPath(args[1]), "extract-error.txt"), error.ToString()); } catch { }
++                Console.Error.WriteLine(error); return 1;
++            }
++            MessageBox.Show(error.Message, "AgentLink 安装失败"); return 1;
++        }
++    }
++}
+--- 0.3.9/README.md
++++ 0.3.10/README.md
+@@ -1,76 +1,89 @@
+-# AgentLink GUI 0.3.9
+-
+-本版修复清理失败后对端仍能获准发起新场次的问题。执行期间持有独立共享执行锁，清理失败时保留，确认清理成功后才释放；双方准入均检查该锁。保留暂停创建及 Windows Job 进程保护。双方须支持 agentlink-execution-lease-v3（0.3.9 起），旧节点将被新版拒绝；不能保证未升级旧节点主动发起时不消耗请求。详见 `DEBUG-0.3.9.md`。当前为待验收候选，真实双机、共享中断与各节点实际权限验收未完成。
+-
+-这是基于 PyQt5 的双机 Codex 协作程序。应用内置 Python 3.13，Windows 10/11 x64 可直接安装，不需要安装 pip 包。每台电脑仍需有已登录、支持 App Server 的 Codex。本版按本机 Codex 0.153.4 协议开发。
+-
+-## 使用
+-
+-### 从 0.3.0 / 0.3.1 / 0.3.2 更新（免安装 ZIP）
+-
+-两台电脑都退出旧版 AgentLink GUI，将 `AgentLink-GUI-0.3.8-Windows-x64.zip` 完整解压到各自电脑的新目录，双击该目录中的 `AgentLink.exe`。不要直接在 ZIP 内运行，也不要启动旧的桌面快捷方式。界面左下角应为 v0.3.8。
+-
+-本版会沿用 `%LOCALAPPDATA%\AgentLinkGUI` 中原有设置和讨论历史，不需要重新填写共享目录。A、B 两台都必须更新：新版的短时文件锁需要双方共同遵守，旧版不会使用这些锁。
+-
+-### 继续上一场讨论
+-
+-0.3.1 的历史列表只用于查看；每次发起都会新建 Codex 任务且不附历史，所以“根据上面结论继续”并不能让模型知道上轮内容。0.3.2 增加显式上下文承接：
+-
+-1. 双方连接节点。在左侧选择一场**已完成**的讨论（也支持已有 0.3.1 记录）。
+-2. 输入下一步要求，例如“按上一轮测试集开始测试，5 次调用后给出阶段结果”，选择 2 轮。
+-3. 检查输入框上方“将继续所选讨论”的来源提示，点击 **继续讨论**。
+-4. 新场次携带完整的历史议题、用户补充和双方完成答复；更早承接的历史一并保留。双方的“承接上下文”页可查看所用材料。
+-5. 无关任务先点 **新建讨论**，再输入议题；这样不携带旧历史。运行中的补充仍用“补充到下一轮”。
+-
+-承接在新场次保存独立 `context.json` 快照并校验 SHA-256，不改写旧讨论，不复制或恢复另一台的 Codex 任务。双方仍创建各自的新任务，但每次请求均明确附带同一份历史，重启后仍可续接。复制历史不额外调用模型；更长的输入会增加 token 用量。
+-
+-只有已完成记录可自动承接。停止、失败或导入的旧式 TXT 不被当作完整最终结论；可选择前一场已完成记录，或新建讨论并粘贴经确认的材料。缺失、损坏或超过 120000 字符的历史会报错停止，不静默截断。历史不包含原始工具输出、登录资料或内部思考；需要执行证据时，仍需按答复中的证据路径读取实际文件。
+-
+-双方必须连接且支持此功能（0.3.2 或兼容版本）；旧版对端会触发升级提示。承接不改变任一节点的项目、工具配置或权限。首轮提示也已调整：用户要求测试或实施时，应实际执行获准工作，而非固定再次提出方案。
+-
+-### 保留的 0.3.1 文件访问修复
+-
+-修复 SMB 共享目录中的并发读取/替换造成 `Errno 13 / WinError 5`。同一个 JSON 文件用稳定的 `.文件名.io.lock` 做短时互斥；读取句柄允许删除/重命名共享；访问冲突短暂重试，超过上限则保留真实错误。仍使用写完临时文件再发布的方式，避免读到半份 JSON。此重试只针对文件 I/O，不会重复调用模型。
+-
+-`.io.lock` 文件留在目录中是正常现象；进程退出时操作系统会释放实际锁，不用手工删除。真实、持续的权限错误仍会显示，并写入本机 `logs\agentlink-errors.jsonl`，记录路径、errno、WinError 与调用堆栈。共享访问恢复后，会清除对应的文件访问警告。
+-
+-### 首次使用
+-
+-1. 将免安装 ZIP 完整解压到两台电脑各自的本地目录，双击 `AgentLink.exe`。
+-2. 首次设置中，ZHOUBY 选择 A；WILLDESKTOP 选择 B。
+-3. 首次设置默认共享目录为 `\\192.168.1.108\shared\AgentLink-GUI-v1`。两边必须一致。程序不保存 SMB 密码；沿用当前 Windows 用户已建立的共享访问。
+-4. 检查自动找到的 `codex.exe`，保持“沿用本机 Codex 技能和插件配置”和“只读沙盒”，保存后点“连接节点”。
+-5. 两边在线后，任一台输入议题、选评审轮数、点“发起讨论”。1 轮为初稿→评审→修订，共 3 次调用；2 轮为 5 次调用。双方都能暂停、继续、停止和补充要求。
+-
+-两台共同处理一场讨论。发起方负责初稿与最终修订，另一方评审。暂停在当前调用结束后生效；停止请求中断正在运行的模型，接口不响应时终止本机 App Server 进程树。失败后保留记录，不自动重发模型请求；新建讨论后可再次尝试。
+-
+-## 界面
+-
+-- 讨论现场分 A/B 两列，增量显示回答；对方内容约每秒同步。
+-- 公开思考摘要只显示接口提供的摘要，不显示完整内部思考。接口未提供时该页留有说明。
+-- 工具事件显示命令、工具状态和有限长度的输出；原始接口诊断在本机日志。
+-- 节点能力来自各台 Codex 的技能与 MCP 服务清单；实际可用性仍取决于配置、授权和当前项目。
+-- 本机项目目录影响项目技能/规则。各台自行选择目录与权限，另一台不能远程提高权限。只读不等于禁用全部外部工具；额外权限请求不会自动批准。
+-- 用户输入请求暂以运行日志提示，可用“补充到下一轮”传达要求；本版不提供通用工具授权弹窗。
+-- 导入旧版 `discussion.txt` 可阅读既有记录；导出完整记录为 TXT/Markdown。“实施交接”只生成交接文档，后续在具体项目中执行。
+-
+-## Codex 桌面界面
+-
+-本版通过 Codex 本地 App Server 创建各节点独立、非临时的任务，同一节点在一场讨论中复用任务。可复制“Codex 任务 ID”，在对应电脑的 Codex 桌面端请助手打开该本机任务。任务是否直接出现在侧栏取决于桌面端版本和项目列表；本版不修改 Codex 数据库。跨两个账号的完整讨论由 AgentLink 界面汇总，并非原生跨账号群聊。
+-
+-官方接口说明：https://learn.chatgpt.com/docs/app-server
+-
+-## 文件与卸载
+-
+-- 免安装版程序：你解压的目录；旧安装版程序：`%LOCALAPPDATA%\Programs\AgentLinkGUI`
+-- 设置、历史、日志：`%LOCALAPPDATA%\AgentLinkGUI`
+-- 旧版本：`%LOCALAPPDATA%\AgentLinkApp`，本版保留。
+-- 共享记录：所选共享目录下 `jobs`；节点在线状态在 `nodes`。
+-- 完整源码直接包含在安装目录的 `main.py`、`app`、`source`，运行环境是普通文件，可检查、修改和替换。
+-- 卸载：关闭程序，删除“AgentLink GUI”桌面/开始菜单快捷方式和上述程序目录。历史目录可保留。
+-
+-安装程序为本地构建的未签名文件，按当前用户安装，不要求管理员权限。不复制任何 Codex 登录凭据到共享目录或安装包。代码使用 GPL-3.0；依赖许可及源码获取地址见 `licenses`。
+-
+-## 验证范围
+-
+-源码中 `tests/test_system.py` 使用本机两个独立模拟 App Server，验证 A/B 均能发起、多轮、中文、流式事件、跨节点暂停/继续/停止、故障传递与重复执行保护。模拟测试不消耗模型额度。本版打包后还验证内置 Python/PyQt 启动和界面渲染。新的 GUI 在真实两台电脑和各自账号下的联调，仍需安装后完成；旧版本已经通过用户的真实双机验证。
++# AgentLink GUI 0.3.10
++
++本版在 0.3.9 的进程归属、共享执行锁和实例绑定保护基础上，恢复 0.3.4 的无时限等待、活动状态同步、未完成输出导出及协议 2 历史续接。旧设置自动迁移，无需手工删除超时字段。双方必须使用 0.3.10 或支持同等无时限执行归属能力的版本。详见 `DEBUG-0.3.10.md`；本机测试不能替代真实双机验收。
++
++这是基于 PyQt5 的双机 Codex 协作程序。应用内置 Python 3.13，Windows 10/11 x64 可直接安装，不需要安装 pip 包。每台电脑仍需有已登录、支持 App Server 的 Codex。本版按本机 Codex 0.153.4 协议开发。
++
++## 使用
++
++### 从 0.3.4 / 0.3.9 等版本更新（免安装 ZIP）
++
++两台电脑都退出旧版 AgentLink GUI，将 `AgentLink-GUI-0.3.10-Windows-x64.zip` 完整解压到各自电脑的新目录，双击该目录中的 `AgentLink.exe`。不要直接在 ZIP 内运行，也不要启动旧的桌面快捷方式。界面左下角应为 v0.3.10。
++
++本版会沿用 `%LOCALAPPDATA%\AgentLinkGUI` 中原有设置和讨论历史，不需要重新填写共享目录。A、B 两台都必须更新：新版的短时文件锁需要双方共同遵守，旧版不会使用这些锁。
++
++### 长任务持续等待
++
++- 不限制一次模型任务的总时长；移除原先 900 秒调用上限、20 分钟等待对方上限和新场次的到期时间。
++- 设置中原有的“单次调用超时”改为无时限等待说明；旧设置中的 900 秒等数值会自动归零，无需手工编辑。
++- 执行节点约每秒向另一节点同步任务阶段、运行时长、最近事件距今多久、是否有工具仍在运行。对方继续等待，不为“继续等”额外调用模型。
++- 工具长时间执行会显示“工具执行中，继续等待”；60 秒没有新事件且无在途工具时，显示“进程仍在，暂时无法确认新进展”，继续等待并保留手动停止入口。这是静默提示，不是终止计时器。
++- 模型进程真实退出、接口明确返回失败、用户停止/退出程序或持续通信中断仍按错误/停止处理。执行门禁保留 0.3.9 的严格心跳时效、角色锁和实例校验，两机仍需保持系统时间同步；对端记录失效或实例变化时停止且不重发模型请求。共享目录持续故障沿用既有故障处理。
++- 连接初始化及非模型管理接口仍有通信超时。外部模型服务或工具自身的限制不由 AgentLink 改写。
++
++新场次使用协议 2（明确的无到期时间），新发起前检查对端具备 `agentlink-execution-lease-v4`，并公布 `unlimited-wait-v1`。协议 1 和 0.3.4 生成的协议 2 已完成历史均可查看和续接。双方更新后再开始新任务；被旧版超时中止的任务不会自动重放。
++
++未完成讨论导出现在会附上已有公开进展和本机任务 ID，并标注“未完成输出”。它们是恢复线索，不会被自动当作已完成结论。
++
++### 继续上一场讨论
++
++0.3.1 的历史列表只用于查看；每次发起都会新建 Codex 任务且不附历史，所以“根据上面结论继续”并不能让模型知道上轮内容。0.3.2 增加显式上下文承接：
++
++1. 双方连接节点。在左侧选择一场**已完成**的讨论（也支持已有 0.3.1 记录）。
++2. 输入下一步要求，例如“按上一轮测试集开始测试，5 次调用后给出阶段结果”，选择 2 轮。
++3. 检查输入框上方“将继续所选讨论”的来源提示，点击 **继续讨论**。
++4. 新场次携带完整的历史议题、用户补充和双方完成答复；更早承接的历史一并保留。双方的“承接上下文”页可查看所用材料。
++5. 无关任务先点 **新建讨论**，再输入议题；这样不携带旧历史。运行中的补充仍用“补充到下一轮”。
++
++承接在新场次保存独立 `context.json` 快照并校验 SHA-256，不改写旧讨论，不复制或恢复另一台的 Codex 任务。双方仍创建各自的新任务，但每次请求均明确附带同一份历史，重启后仍可续接。复制历史不额外调用模型；更长的输入会增加 token 用量。
++
++只有已完成记录可自动承接。停止、失败或导入的旧式 TXT 不被当作完整最终结论；可选择前一场已完成记录，或新建讨论并粘贴经确认的材料。缺失、损坏或超过 120000 字符的历史会报错停止，不静默截断。历史不包含原始工具输出、登录资料或内部思考；需要执行证据时，仍需按答复中的证据路径读取实际文件。
++
++双方必须连接且支持此功能（0.3.2 或兼容版本）；旧版对端会触发升级提示。承接不改变任一节点的项目、工具配置或权限。首轮提示也已调整：用户要求测试或实施时，应实际执行获准工作，而非固定再次提出方案。
++
++### 保留的 0.3.1 文件访问修复
++
++修复 SMB 共享目录中的并发读取/替换造成 `Errno 13 / WinError 5`。同一个 JSON 文件用稳定的 `.文件名.io.lock` 做短时互斥；读取句柄允许删除/重命名共享；访问冲突短暂重试，超过上限则保留真实错误。仍使用写完临时文件再发布的方式，避免读到半份 JSON。此重试只针对文件 I/O，不会重复调用模型。
++
++`.io.lock` 文件留在目录中是正常现象；进程退出时操作系统会释放实际锁，不用手工删除。真实、持续的权限错误仍会显示，并写入本机 `logs\agentlink-errors.jsonl`，记录路径、errno、WinError 与调用堆栈。共享访问恢复后，会清除对应的文件访问警告。
++
++### 首次使用
++
++1. 将免安装 ZIP 完整解压到两台电脑各自的本地目录，双击 `AgentLink.exe`。
++2. 首次设置中，ZHOUBY 选择 A；WILLDESKTOP 选择 B。
++3. 首次设置默认共享目录为 `\\192.168.1.108\shared\AgentLink-GUI-v1`。两边必须一致。程序不保存 SMB 密码；沿用当前 Windows 用户已建立的共享访问。
++4. 检查自动找到的 `codex.exe`，保持“沿用本机 Codex 技能和插件配置”和“只读沙盒”，保存后点“连接节点”。
++5. 两边在线后，任一台输入议题、选评审轮数、点“发起讨论”。1 轮为初稿→评审→修订，共 3 次调用；2 轮为 5 次调用。双方都能暂停、继续、停止和补充要求。
++
++两台共同处理一场讨论。发起方负责初稿与最终修订，另一方评审。暂停在当前调用结束后生效；停止请求中断正在运行的模型，接口不响应时终止本机 App Server 进程树。失败后保留记录，不自动重发模型请求；新建讨论后可再次尝试。
++
++## 界面
++
++- 讨论现场分 A/B 两列，增量显示回答；对方内容约每秒同步。
++- 公开思考摘要只显示接口提供的摘要，不显示完整内部思考。接口未提供时该页留有说明。
++- 工具事件显示命令、工具状态和有限长度的输出；原始接口诊断在本机日志。
++- 节点能力来自各台 Codex 的技能与 MCP 服务清单；实际可用性仍取决于配置、授权和当前项目。
++- 本机项目目录影响项目技能/规则。各台自行选择目录与权限，另一台不能远程提高权限。只读不等于禁用全部外部工具；额外权限请求不会自动批准。
++- 用户输入请求暂以运行日志提示，可用“补充到下一轮”传达要求；本版不提供通用工具授权弹窗。
++- 导入旧版 `discussion.txt` 可阅读既有记录；导出完整记录为 TXT/Markdown。“实施交接”只生成交接文档，后续在具体项目中执行。
++
++## Codex 桌面界面
++
++本版通过 Codex 本地 App Server 创建各节点独立、非临时的任务，同一节点在一场讨论中复用任务。可复制“Codex 任务 ID”，在对应电脑的 Codex 桌面端请助手打开该本机任务。任务是否直接出现在侧栏取决于桌面端版本和项目列表；本版不修改 Codex 数据库。跨两个账号的完整讨论由 AgentLink 界面汇总，并非原生跨账号群聊。
++
++官方接口说明：https://learn.chatgpt.com/docs/app-server
++
++## 文件与卸载
++
++- 免安装版程序：你解压的目录；旧安装版程序：`%LOCALAPPDATA%\Programs\AgentLinkGUI`
++- 设置、历史、日志：`%LOCALAPPDATA%\AgentLinkGUI`
++- 旧版本：`%LOCALAPPDATA%\AgentLinkApp`，本版保留。
++- 共享记录：所选共享目录下 `jobs`；节点在线状态在 `nodes`。
++- 完整源码直接包含在安装目录的 `main.py`、`app`、`source`，运行环境是普通文件，可检查、修改和替换。
++- 卸载：关闭程序，删除“AgentLink GUI”桌面/开始菜单快捷方式和上述程序目录。历史目录可保留。
++
++安装程序为本地构建的未签名文件，按当前用户安装，不要求管理员权限。不复制任何 Codex 登录凭据到共享目录或安装包。代码使用 GPL-3.0；依赖许可及源码获取地址见 `licenses`。
++
++## 验证范围
++
++源码中 `tests/test_system.py` 使用本机两个独立模拟 App Server，验证 A/B 均能发起、多轮、中文、流式事件、跨节点暂停/继续/停止、故障传递与重复执行保护。模拟测试不消耗模型额度。本版打包后还验证内置 Python/PyQt 启动和界面渲染。新的 GUI 在真实两台电脑和各自账号下的联调，仍需安装后完成；旧版本已经通过用户的真实双机验证。
+--- 0.3.9/tests/mock_server.py
++++ 0.3.10/tests/mock_server.py
+@@ -69,8 +69,9 @@
+                     'prompt': prompt, 'request_id': request['id'], 'method': method}, ensure_ascii=False) + '\n')
+         if '[CRASH]' in prompt:
+             sys.exit(7)
+-        if '[AUTH]' in prompt or '[TRANSPORT]' in prompt:
+-            message = 'fixture authentication failed' if '[AUTH]' in prompt else 'fixture transport failed'
++        if '[AUTH]' in prompt or '[TRANSPORT]' in prompt or '[UPSTREAM_TIMEOUT]' in prompt:
++            message = ('fixture upstream timeout' if '[UPSTREAM_TIMEOUT]' in prompt else
++                       'fixture authentication failed' if '[AUTH]' in prompt else 'fixture transport failed')
+             send({'id': request['id'], 'error': {'code': -32000, 'message': message}})
+             continue
+         cancel = turns[turn_id] = threading.Event()
+--- 0.3.9/tests/test_failure_recovery.py
++++ 0.3.10/tests/test_failure_recovery.py
+@@ -47,7 +47,7 @@
+         self.known_processes = []
+         samples, pairs = [], []
+         spec = {'warmup_pairs': 3, 'measured_pairs': 9,
+-            'fault_order': ['timeout','cancel','publish_failure'] * 4,
++            'fault_order': ['upstream_timeout','cancel','publish_failure'] * 4,
+             'normal_jobs_after_every_failure': 1,
+             'threshold': .20, 'comparison': 'first/last 3 measured pair medians',
+             'resource_scope': 'two service threads in harness plus current mock child processes'}
+@@ -56,7 +56,6 @@
+             a = self.nodes['A']
+             base_calls = sum(len(self.calls(r)) for r in ('A','B'))
+             previous_ids = {p.name for p in (self.shared / 'jobs').iterdir()}
+-            old_timeout = a.settings.timeout_seconds
+             original_publish = storage.atomic_json
+             denied = []
+             def publish(path, value):
+@@ -66,20 +65,16 @@
+                     denied.append(str(path))
+                     raise PermissionError('injected result publication denial')
+                 return original_publish(path, value)
+-            try:
+-                if mode == 'timeout':
+-                    a.settings.timeout_seconds = .15
+-                with patch.object(storage, 'atomic_json', side_effect=publish):
+-                    a.command('start', topic=('[LONG] ' if mode != 'publish_failure' else '') + mode, rounds=1)
+-                    until(lambda: len(self.calls('A')) + len(self.calls('B')) == base_calls + 1)
+-                    failure_pid = a.client.process.pid
+-                    if mode == 'cancel':
+-                        a.command('cancel')
+-                    until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
+-            finally:
+-                a.settings.timeout_seconds = old_timeout
++            with patch.object(storage, 'atomic_json', side_effect=publish):
++                marker = '[UPSTREAM_TIMEOUT] ' if mode == 'upstream_timeout' else '[LONG] ' if mode == 'cancel' else ''
++                a.command('start', topic=marker + mode, rounds=1)
++                until(lambda: len(self.calls('A')) + len(self.calls('B')) == base_calls + 1)
++                failure_pid = a.client.process.pid
++                if mode == 'cancel':
++                    a.command('cancel')
++                until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
+             failed = next(p for p in (self.shared / 'jobs').iterdir() if p.name not in previous_ids)
+-            expected = 'failed' if mode == 'publish_failure' else 'cancelled'
++            expected = 'cancelled' if mode == 'cancel' else 'failed'
+             self.assertEqual(read_json(failed / 'state.json')['status'], expected)
+             self.assertEqual(sum(len(self.calls(r)) for r in ('A','B')) - base_calls, 1)
+             if mode == 'publish_failure':
+@@ -113,7 +108,7 @@
+             samples.append(sample)
+             pairs.append({'pair':pair, 'fault':mode, 'failed_job':failed.name, 'failed_status':expected,
+                 'next_job':completed.name, 'requests':4, 'old_requests':1, 'new_requests':3,
+-                'fault_location': {'timeout':'model request running; accelerated timeout',
++                'fault_location': {'upstream_timeout':'request received; explicit upstream timeout error',
+                     'cancel':'model request running; submitted cancellation',
+                     'publish_failure':'model returned and local result saved; shared result write denied'}[mode],
+                 'injection_kind':'mock/API injection, not hard process termination',
+--- 0.3.9/tests/test_faults.py
++++ 0.3.10/tests/test_faults.py
+@@ -25,12 +25,11 @@
+                 self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')) - before, 1)
+                 self.assertEqual(len(self.calls('B')), 0)
+ 
+-    def test_T07_accelerated_timeout_cancels_no_retry(self):
+-        self.nodes['A'].settings.timeout_seconds = .15  # injected clock budget, not a GUI setting
+-        self.nodes['A'].command('start', topic='[LONG] accelerated timeout', rounds=1)
++    def test_T07_upstream_timeout_fails_no_retry(self):
++        self.nodes['A'].command('start', topic='[UPSTREAM_TIMEOUT] explicit upstream error', rounds=1)
+         until(lambda: not self.nodes['A'].start_pending and all(not n.active for n in self.nodes.values()))
+-        self.assertEqual(self.state(), 'cancelled')
+-        self.assertIn('超时', read_json(self.job() / 'A-error.json')['message'])
++        self.assertEqual(self.state(), 'failed')
++        self.assertIn('upstream timeout', read_json(self.job() / 'A-error.json')['message'])
+         self.assertEqual([len(self.calls(r)) for r in ('A', 'B')], [1, 0])
+ 
+     def test_T07_content_refusal_is_normal_completed_text(self):
+--- 0.3.9/tests/test_integration_upgrade.py
++++ 0.3.10/tests/test_integration_upgrade.py
+@@ -0,0 +1,137 @@
++"""Cross-version migration and restored UI behavior with preserved safety gates."""
++import json
++from pathlib import Path
++import os
++import sys
++import tempfile
++import unittest
++from unittest.mock import patch
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path[:0] = [str(ROOT), str(ROOT/'tests')]
++os.environ['QT_QPA_PLATFORM'] = 'offscreen'
++from PyQt5 import QtWidgets as W
++from app.storage import Settings, Mailbox, atomic_json, read_json
++from app.context import prepare_context
++from app.ui import MainWindow, SettingsDialog
++from app.protocol import RpcClient, TurnView
++from app.engine import NodeService
++from app.protocol import Cancelled
++import test_system
++from test_system import until
++
++class UpgradeTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        cls.app = W.QApplication.instance() or W.QApplication([])
++
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory(prefix='agentlink-upgrade-')
++        self.addCleanup(self.temp.cleanup)
++        self.root = Path(self.temp.name)
++
++    def test_actual_034_settings_and_039_legacy_values_migrate(self):
++        legacy = json.loads((ROOT/'tests/fixtures/034-settings.json').read_text(encoding='utf-8'))
++        self.assertEqual(legacy['timeout_seconds'], 0)
++        for timeout in (legacy['timeout_seconds'], 900, 3600):
++            with self.subTest(timeout=timeout):
++                old = dict(legacy, timeout_seconds=timeout, role='B', workspace='preserve-workspace',
++                           sandbox='workspace-write', tools='discussion', model='preserve-model')
++                atomic_json(self.root/'settings.json', old)
++                loaded = Settings.load(self.root)
++                self.assertEqual(loaded.timeout_seconds, 0)
++                loaded.save(self.root)
++                actual = read_json(self.root/'settings.json')
++                self.assertEqual(actual, dict(old, timeout_seconds=0))
++                dialog = SettingsDialog(loaded)
++                self.assertFalse(hasattr(dialog, 'timeout'))
++                dialog.close()
++
++    def test_protocol2_and_protocol1_history_continue_without_mutation(self):
++        fixture = json.loads((ROOT/'tests/fixtures/034-history.json').read_text(encoding='utf-8'))
++        for protocol in (1,2):
++            with self.subTest(protocol=protocol):
++                box = Mailbox(self.root/str(protocol)/'share', self.root/str(protocol)/'local')
++                box.connect()
++                meta = dict(fixture['meta'], protocol=protocol)
++                if protocol == 1:
++                    meta['expires'] = 1  # completed historical jobs remain usable after expiry
++                    meta.pop('wait_policy')
++                job_id = meta['id']
++                box.job(job_id).mkdir()
++                for name, data in [('meta',meta), ('control',fixture['control']), ('state',fixture['state'])]:
++                    box.put(job_id, name+'.json', data)
++                for turn in fixture['turns']:
++                    box.put(job_id, 'turn-'+turn['step']+'.json', turn)
++                before = (box.job(job_id)/'meta.json').read_bytes()
++                context = prepare_context(box,job_id)
++                self.assertEqual(context['discussions'][0]['turns'][-1]['answer'], 'LEGACY-034-ANSWER-2')
++                self.assertEqual(context['discussions'][0]['notes'], ['LEGACY-NOTE'])
++                self.assertEqual((box.job(job_id)/'meta.json').read_bytes(), before)
++
++    def test_unfinished_export_and_status_label_restored(self):
++        window = MainWindow(Settings(auto_connect=False),self.root/'gui',start_service=False)
++        self.addCleanup(window.close)
++        job_id = '20260911-000000-'+'a'*32
++        window.snapshot = {'meta':{'id':job_id,'topic':'部分输出','rounds':1},'turns':[],
++            'live':[{'step':'000-A','index':0,'role':'A','status':'running','thread_id':'TASK-PARTIAL',
++                     'answer':'PARTIAL-ANSWER','blocks':[{'text':'PARTIAL-ANSWER'}]}]}
++        target=self.root/'export.txt'
++        with patch.object(W.QFileDialog,'getSaveFileName',return_value=(str(target),'')):
++            window.export_report()
++        text=target.read_text(encoding='utf-8-sig')
++        self.assertIn('未完成输出',text)
++        self.assertIn('PARTIAL-ANSWER',text)
++        self.assertIn('TASK-PARTIAL',text)
++        window.execution={'A':{'job_id':job_id,'execution':{'phase':'tool_running',
++                           'elapsed_seconds':172800,'event_age_seconds':70}}}
++        window.render_execution()
++        self.assertIn('工具执行中',window.execution_label.text())
++
++    def test_stale_turn_cannot_reset_activity_silence(self):
++        client=RpcClient([],self.root)
++        client.current=TurnView('A','002-A','same-thread')
++        client.current.turn_id='new'
++        client.turn_started_at=client.last_turn_event_at=100
++        with patch('app.protocol.time.monotonic',return_value=200):
++            client._feed_current('item/agentMessage/delta',{'threadId':'same-thread','turnId':'old',
++                                                         'itemId':'old','delta':'STALE'})
++            self.assertEqual(client.last_turn_event_at,100)
++            self.assertEqual(client.turn_event_count,0)
++            self.assertEqual(client.activity_snapshot()['event_age_seconds'],100)
++
++    def test_terminal_previous_heartbeat_allowed_but_other_running_job_rejected(self):
++        box=Mailbox(self.root/'share',self.root/'local'); box.connect()
++        old=box.create('old completed',1)
++        new=box.create('new active',1)
++        box.put(old['id'],'state.json',{'status':'completed'})
++        node=NodeService(Settings(role='A'),self.root/'node',lambda *args:None)
++        node.box=box
++        atomic_json(box.root/'nodes/B.json',{'job_id':old['id'],'updated':__import__('time').time(),
++                                            'instance':'b'*32,'status':'waiting_peer'})
++        node._check_peer_wait(new['id'],'B')
++        box.put(old['id'],'state.json',{'status':'running'})
++        with self.assertRaises(Cancelled):
++            node._check_peer_wait(new['id'],'B')
++
++class UpgradeServiceTests(unittest.TestCase):
++    setUp=test_system.SystemTests.setUp
++    tearDown=test_system.SystemTests.tearDown
++    calls=test_system.SystemTests.calls
++    job=test_system.SystemTests.job
++    state=test_system.SystemTests.state
++
++    def test_039_capability_is_rejected_before_job_creation(self):
++        peer=self.nodes['B']
++        original=peer._heartbeat
++        peer._heartbeat=lambda *a,**k: None
++        peer.stop(); peer.thread.join(15)
++        atomic_json(self.shared/'nodes/B.json',{'role':'B','features':['agentlink-execution-lease-v3'],
++                                             'updated':__import__('time').time(),'status':'idle'})
++        self.nodes['A'].command('start',topic='reject old peer',rounds=1)
++        until(lambda: any(k=='error' and '0.3.10' in v['message'] for k,v in self.events['A']))
++        self.assertEqual(len(list((self.shared/'jobs').iterdir())),0)
++        self.assertEqual(self.calls('A')+self.calls('B'),[])
++
++if __name__=='__main__':
++    unittest.main(verbosity=2)
+--- 0.3.9/tests/test_waiting.py
++++ 0.3.10/tests/test_waiting.py
+@@ -0,0 +1,224 @@
++"""Unlimited task waiting, with virtual time and isolated offline integration."""
++import copy
++import json
++from pathlib import Path
++import sys
++import tempfile
++import time
++from types import SimpleNamespace
++import unittest
++from unittest.mock import patch
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++sys.path.insert(0, str(ROOT / 'tests'))
++from app import protocol
++from app.protocol import RpcClient, TurnView, Cancelled
++from app.storage import Mailbox, Settings, read_json, atomic_json, LONG_TASK_FEATURE
++from app.engine import NodeService
++import test_system
++from test_system import until
++
++
++class Clock:
++    def __init__(self):
++        self.value = 100.
++
++    def monotonic(self):
++        return self.value
++
++    def sleep(self, seconds):
++        self.value += seconds
++
++
++class ScriptedRpc(RpcClient):
++    """Real RPC/turn loop, deterministic incoming events and virtual time."""
++    def __init__(self, clock, script):
++        super().__init__([], '.')
++        self.process = SimpleNamespace(poll=lambda: None)
++        self.clock, self.script, self.sent = clock, list(script), []
++
++    def send(self, message):
++        self.sent.append(message)
++
++    def poll(self, timeout=0):
++        if not self.script:
++            raise AssertionError('Script exhausted; loop should already have terminated')
++        elapsed, message = self.script.pop(0)
++        self.clock.value += elapsed
++        if message == 'ack':
++            message = {'id': self.sent[0]['id'], 'result': {'turn': {'id': 'turn-1'}}}
++        if message:
++            self.messages.put(message)
++        super().poll(0)
++
++
++def event(method, **params):
++    return {'method': method, 'params': {'threadId': 'thread-1', 'turnId': 'turn-1', **params}}
++
++
++def finished(status='completed'):
++    return event('turn/completed', turn={'id': 'turn-1', 'status': status,
++                 'items': [{'type': 'agentMessage', 'id': 'answer', 'phase': 'final_answer', 'text': '完成'}]})
++
++
++class WaitingTests(unittest.TestCase):
++    def run_rpc(self, script, pump_extra=lambda client: None):
++        clock = Clock()
++        client = ScriptedRpc(clock, script)
++        observations = []
++        def pump():
++            observations.append(client.activity_snapshot())
++            pump_extra(client)
++        with patch.object(protocol, 'time', clock), patch.object(protocol, 'stop_process_tree') as stop:
++            result = client.run_turn('thread-1', '测试', 'A', '000-A',
++                                     {'model': 'mock', 'timeout_seconds': 1}, lambda v: None, pump)
++            stop.assert_not_called()
++        self.assertEqual(result['answer'], '完成')
++        self.assertEqual([m['method'] for m in client.sent], ['turn/start'])
++        return observations
++
++    def test_model_start_ack_can_take_two_days_without_retry(self):
++        self.run_rpc([(172800, 'ack'), (1, finished())])
++
++    def test_tool_running_more_than_two_days_keeps_waiting(self):
++        seen = self.run_rpc([(0, 'ack'), (1, event('item/started', item={
++            'id': 'tool', 'type': 'commandExecution', 'status': 'inProgress', 'command': 'offline fixture'})),
++            (172800, None), (1, finished())])
++        self.assertTrue(any(x['phase'] == 'tool_running' and x['elapsed_seconds'] > 900 for x in seen))
++
++    def test_silent_process_is_uncertain_and_not_automatically_killed(self):
++        seen = self.run_rpc([(0, 'ack'), (1800, None), (1, finished())])
++        self.assertTrue(any(x['phase'] == 'quiet' and x['process_alive'] for x in seen))
++
++    def test_manual_cancel_still_interrupts(self):
++        clock = Clock()
++        client = ScriptedRpc(clock, [(0, 'ack'), (0, finished('interrupted'))])
++        def pump():
++            if client.current.turn_id:
++                raise Cancelled('用户停止')
++        with patch.object(protocol, 'time', clock), patch.object(protocol, 'stop_process_tree'):
++            with self.assertRaises(Cancelled):
++                client.run_turn('thread-1', '测试', 'A', '000-A', {'model': 'mock'}, lambda v: None, pump)
++        self.assertEqual([m['method'] for m in client.sent], ['turn/start', 'turn/interrupt'])
++
++    def test_unresponsive_interrupt_still_cleans_owned_process(self):
++        clock = Clock()
++        client = ScriptedRpc(clock, [(0, 'ack'), (11, None)])
++        def pump():
++            if client.current.turn_id:
++                raise Cancelled('用户停止')
++        with patch.object(protocol, 'time', clock), patch.object(protocol, 'stop_process_tree') as stop:
++            with self.assertRaisesRegex(Cancelled, '子进程'):
++                client.run_turn('thread-1', '测试', 'A', '000-A', {'model': 'mock'}, lambda v: None, pump)
++            stop.assert_called_once_with(client.process)
++
++    def test_actual_process_exit_is_error_not_infinite_wait(self):
++        clock = Clock()
++        client = ScriptedRpc(clock, [(0, 'ack'), (1, {'method': '_eof'})])
++        with patch.object(protocol, 'time', clock), patch.object(protocol, 'stop_process_tree'):
++            with self.assertRaisesRegex(RuntimeError, '意外退出'):
++                client.run_turn('thread-1', '测试', 'A', '000-A', {'model': 'mock'}, lambda v: None, lambda: None)
++
++    def test_other_thread_events_do_not_claim_progress(self):
++        seen = self.run_rpc([(0, 'ack'), (120, event('item/agentMessage/delta', threadId='other', itemId='x', delta='other')),
++                            (1, finished())])
++        self.assertTrue(any(x['phase'] == 'quiet' and x['event_count'] == 0 for x in seen))
++
++    def test_new_meta_has_no_expiry_legacy_values_remain_strict(self):
++        with tempfile.TemporaryDirectory(prefix='agentlink-wait-') as folder:
++            box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
++            meta = box.create('长任务', 1, unlimited=True)
++            self.assertIsNone(meta['expires'])
++            with patch('app.storage.now', return_value=time.time() + 365 * 86400):
++                box.validate_meta(meta, meta['id'])
++            for value in (True, 2.0, None, '2'):
++                with self.assertRaises(ValueError):
++                    box.validate_meta(dict(meta, protocol=value), meta['id'])
++            for value in (0, True, float('nan'), float('inf')):
++                with self.assertRaises(ValueError):
++                    box.validate_meta(dict(meta, expires=value), meta['id'])
++            with self.assertRaises(ValueError):
++                box.validate_meta(dict(meta, wait_policy='unknown'), meta['id'])
++            atomic_json(Path(folder) / 'settings.json', {'timeout_seconds': 900, 'auto_connect': False})
++            self.assertEqual(Settings.load(folder).timeout_seconds, 0)
++
++    def test_peer_heartbeat_gap_detected_on_local_monotonic_clock(self):
++        with tempfile.TemporaryDirectory(prefix='agentlink-peer-') as folder:
++            box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
++            node = NodeService(Settings(), box.local, lambda *args: None); node.box = box
++            peer = {'updated': time.time(), 'instance': 'peer', 'status': 'running', 'job_id': 'job'}
++            atomic_json(box.root / 'nodes' / 'B.json', peer)
++            node._check_peer_wait('job', 'B')
++            node.peer_seen['seen_at'] -= 31
++            with self.assertRaisesRegex(Cancelled, '心跳'):
++                node._check_peer_wait('job', 'B')
++            # A new heartbeat renews waiting regardless of cross-machine wall-clock skew.
++            peer['updated'] -= 3600
++            atomic_json(box.root / 'nodes' / 'B.json', peer)
++            node._check_peer_wait('job', 'B')
++
++    def test_coordinator_waits_past_old_twenty_minute_limit(self):
++        with tempfile.TemporaryDirectory(prefix='agentlink-coordinator-') as folder:
++            box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
++            node = NodeService(Settings(role='A'), box.local, lambda *args: None)
++            node.box, node.connected = box, True
++            clock = Clock()
++            peer = {'updated': time.time(), 'instance': 'peer', 'status': 'idle',
++                    'features': [LONG_TASK_FEATURE]}
++            atomic_json(box.root / 'nodes' / 'B.json', peer)
++            own_calls, waiting_pumps = [], []
++            def own(index, prompt):
++                own_calls.append(index)
++                value = {'index': index, 'role': 'A', 'step': f'{index:03d}-A',
++                         'status': 'completed', 'answer': '本机完成'}
++                box.put(node.active['id'], f'turn-{index:03d}-A.json', value)
++                return value
++            def pump():
++                if (box.get(node.active['id'], 'state.json', {}) or {}).get('status') == 'waiting_peer':
++                    clock.value += 2000
++                    waiting_pumps.append(clock.value)
++                    peer.update(updated=time.time() + clock.value, job_id=node.active['id'], status='running')
++                    atomic_json(box.root / 'nodes' / 'B.json', peer)
++                    if len(waiting_pumps) == 3:
++                        box.put(node.active['id'], 'turn-001-B.json', {'index': 1, 'role': 'B', 'step': '001-B',
++                                'status': 'completed', 'answer': '对方长任务完成'})
++            node._perform, node._pump = own, pump
++            # Isolate coordinator timing; separate service tests exercise real
++            # instance/role/execution gates. Keep result identity validation.
++            node._check_peer_compatibility = lambda **kwargs: 'a' * 32
++            original_put = box.put
++            def put(job_id, filename, value):
++                if filename.startswith('turn-'):
++                    value = dict(value, job_id=job_id)
++                original_put(job_id, filename, value)
++            box.put = put
++            with patch('app.engine.time', clock):
++                node.run_initiator('超过旧等待上限', 1)
++            self.assertEqual(box.get(node.selected, 'state.json')['status'], 'completed')
++            self.assertEqual(own_calls, [0, 2])
++            self.assertGreaterEqual(len(waiting_pumps), 3)
++
++
++class WaitingServiceTests(unittest.TestCase):
++    setUp = test_system.SystemTests.setUp
++    tearDown = test_system.SystemTests.tearDown
++    calls = test_system.SystemTests.calls
++    job = test_system.SystemTests.job
++    state = test_system.SystemTests.state
++
++    def test_peer_progress_visible_and_no_expiry_on_real_mock_flow(self):
++        self.nodes['A'].settings.timeout_seconds = 1  # Legacy value must not kill this longer turn.
++        self.nodes['A'].command('start', topic='[LONG] 无时限活动同步', rounds=1)
++        until(lambda: len(self.calls('A')) == 1)
++        until(lambda: any(k == 'peer' and v.get('execution') for k, v in self.events['B']))
++        meta = read_json(self.job() / 'meta.json')
++        self.assertEqual((meta['protocol'], meta['expires']), (2, None))
++        until(lambda: self.state() == 'completed', 35)
++        self.assertEqual([len(self.calls(r)) for r in ('A', 'B')], [2, 1])
++        peer_events = [v['execution'] for k, v in self.events['B'] if k == 'peer' and v.get('execution')]
++        self.assertTrue(any(x['event_count'] > 0 and x['elapsed_seconds'] >= 1 for x in peer_events))
++
++
++if __name__ == '__main__':
++    unittest.main(verbosity=2)

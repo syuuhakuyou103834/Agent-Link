@@ -1,0 +1,63 @@
+[
+  {
+    "version": "v034",
+    "suite": "waiting",
+    "exit_code": 0,
+    "seconds": 1.65,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_waiting.py",
+      "WaitingTests"
+    ]
+  },
+  {
+    "version": "v039",
+    "suite": "gaps",
+    "exit_code": 0,
+    "seconds": 3.59,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_gaps.py"
+    ]
+  },
+  {
+    "version": "v039",
+    "suite": "freshness",
+    "exit_code": 0,
+    "seconds": 4.17,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_freshness.py"
+    ]
+  },
+  {
+    "version": "v039",
+    "suite": "process_job",
+    "exit_code": 0,
+    "seconds": 8.53,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_process_job.py"
+    ]
+  },
+  {
+    "version": "v039",
+    "suite": "cleanup_failures",
+    "exit_code": 0,
+    "seconds": 1.04,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_cleanup_failures.py"
+    ]
+  },
+  {
+    "version": "v039",
+    "suite": "cleanup_admission",
+    "exit_code": 0,
+    "seconds": 12.97,
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_cleanup_admission.py"
+    ]
+  }
+]

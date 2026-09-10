@@ -1,0 +1,70 @@
+{
+  "old": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.4",
+  "new_zip": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\cleanup-review-20260910\\dist\\AgentLink-GUI-0.3.9-Windows-x64.zip",
+  "zip_sha256": "4e44c7fb7b120738bbe9ed1a829c754f086e62f769d603965a9f17252a89ef39",
+  "files": [
+    {
+      "file": "README.md",
+      "changed": true,
+      "old_sha256": "457e32f8ceaf51a55bd494bd8c1720f304dd225f6658e5766476564841ae72e9",
+      "new_sha256": "80c0014c38f7ddbe6ffc0ecad6a57026483d2fcd762921455e7a7f1fd336feef",
+      "diff_lines": 168
+    },
+    {
+      "file": "app/__init__.py",
+      "changed": true,
+      "old_sha256": "59f77bc4b1f00a1312470062ffc7d049bfe91340708433afba863668a03656ff",
+      "new_sha256": "286ce949b96e5b38f055a3048756ef6b6436f73629e963c8cb296bf743a975c2",
+      "diff_lines": 7
+    },
+    {
+      "file": "app/context.py",
+      "changed": true,
+      "old_sha256": "0607de830d1b6c81a5e28e86f6b7a9d659d1ff6ec3609dbb14e1f956a7562e86",
+      "new_sha256": "ec4c4a3f1c4653cf5125bc67c04793f369869735fab015a218e0d5aa41a912de",
+      "diff_lines": 12
+    },
+    {
+      "file": "app/engine.py",
+      "changed": true,
+      "old_sha256": "f8114213f59fc51b7cacab031f8f1e4381db39fd68741718f1bfcc6e7cecdc79",
+      "new_sha256": "ccc50db4af520569343c7136d2ce132182b05d6b490bf25c8516280862aef465",
+      "diff_lines": 477
+    },
+    {
+      "file": "app/process_job.py",
+      "changed": true,
+      "old_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "new_sha256": "d1207efde76e991ebbae88179cf1f913b54f49fc5b23bfa4be0e77606261ee23",
+      "diff_lines": 162
+    },
+    {
+      "file": "app/protocol.py",
+      "changed": true,
+      "old_sha256": "d4e98de4e91dc2fc033f82152c1ce84ab7dec1a3ce223ffe51001755dcf2bf23",
+      "new_sha256": "aecaff78a60bc2b576c0bd6f78e87f85d8b7a3623ef13572121a377e85a0faf0",
+      "diff_lines": 200
+    },
+    {
+      "file": "app/storage.py",
+      "changed": true,
+      "old_sha256": "e87930a878c8f763091a6b6fb6ff49b81a1d627bc269359ecf18d42aabb9178b",
+      "new_sha256": "71fe5fd336155f776b857cd1eb6bf4b40fda205cb25e88347b8e330627e3eaa7",
+      "diff_lines": 97
+    },
+    {
+      "file": "app/ui.py",
+      "changed": true,
+      "old_sha256": "005d91324c6e797c5dfd3fc56c6cc54d630d221a94ef3fd73f44568eae4de565",
+      "new_sha256": "ee333b4c9422d130f8bccc626b30d8ea176c27cb998a5693ea7d7d79dbe6eca6",
+      "diff_lines": 104
+    },
+    {
+      "file": "main.py",
+      "changed": false,
+      "old_sha256": "57f25b2612dd0f9fe0fe461e4e73cf72c789fe98bbded5122e47b53dfe25bd89",
+      "new_sha256": "57f25b2612dd0f9fe0fe461e4e73cf72c789fe98bbded5122e47b53dfe25bd89",
+      "diff_lines": 0
+    }
+  ]
+}

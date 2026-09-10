@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "sealed_files": 27102,
+  "source_unchanged": true,
+  "zip_sha256": "5924f1d9164c30e12ca6d37abdc6d3bb46113a3a9e67460247402310fe2601e4",
+  "unittest_tests": 67,
+  "hard_windows": 7,
+  "endurance_requests": 330
+}

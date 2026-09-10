@@ -1,0 +1,87 @@
+{
+  "evidence_integrity": "PASS",
+  "files_verified": 7537,
+  "manifest_sha256": "e6e19e28c915fa734731c5eeafff85ff313e6abf23cec8ecb2a6cdb1b7c08ab9",
+  "version": "0.3.5",
+  "unit_cases_passed": 52,
+  "suites": [
+    {
+      "suite": "storage",
+      "unit_cases": 6,
+      "log": "evidence\\205235-storage.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "context",
+      "unit_cases": 8,
+      "log": "evidence\\205235-context.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "system",
+      "unit_cases": 6,
+      "log": "evidence\\205235-system.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "repairs",
+      "unit_cases": 9,
+      "log": "evidence\\205235-repairs.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "gaps",
+      "unit_cases": 6,
+      "log": "evidence\\205235-gaps.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "faults",
+      "unit_cases": 8,
+      "log": "evidence\\205235-faults.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "read_memory",
+      "unit_cases": 2,
+      "log": "evidence\\205235-read_memory.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "peer_review",
+      "unit_cases": 6,
+      "log": "evidence\\205235-peer_review.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "failure_recovery",
+      "unit_cases": 1,
+      "log": "evidence\\205235-failure_recovery.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "gui",
+      "unit_cases": 0,
+      "log": "evidence\\205235-gui.log",
+      "status": "PASS"
+    },
+    {
+      "suite": "windows_startup",
+      "unit_cases": 0,
+      "log": "evidence\\205235-windows_startup.log",
+      "status": "PASS"
+    }
+  ],
+  "source_app_sha256": {
+    "context.py": "ec4c4a3f1c4653cf5125bc67c04793f369869735fab015a218e0d5aa41a912de",
+    "engine.py": "4facb0587d1d4a05e7210c6b6b91ee6821cb2cafa77a8fc192923fbe4f433aa2",
+    "protocol.py": "46ace3ab28cdc1cab7e362ee5f305c2854b0faf25d771fe83714e3911a5f3427",
+    "storage.py": "71fe5fd336155f776b857cd1eb6bf4b40fda205cb25e88347b8e330627e3eaa7",
+    "ui.py": "ee333b4c9422d130f8bccc626b30d8ea176c27cb998a5693ea7d7d79dbe6eca6",
+    "__init__.py": "230a88e47353699202efdc7e55ce18b1fe9ece7034528a88729a1dc9c6665a17"
+  },
+  "zip_sha256": "f41d6f085f3a299ae174b78b8c119a4de61ecf468fbf8e63ac4e2cd7ecffb7f1",
+  "prior_requests_associated": 1228,
+  "mixed_version_zero_request_contract": "FAIL_BOTH_ROLE_DIRECTIONS",
+  "real_two_pc_acceptance": "NOT_ESTABLISHED"
+}

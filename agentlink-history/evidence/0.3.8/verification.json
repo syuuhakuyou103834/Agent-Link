@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "sealed_files": 32269,
+  "unit_tests": 71,
+  "hard_windows": 9,
+  "portable_subset_tests": 27,
+  "zip_sha256": "1250bb914233bb40e9a92c9737bed4d5680a846502055badd557c9496eb7dae3",
+  "review_kit_sha256": "732550d0f8eea4b061794fb04e9e0be403e2ea27674a059054583a8dd938916a",
+  "memory_growth_percent": 2.855573860516203
+}

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\AgentLink-integrated-0.3.10\source\tests\test_endurance.py", line 65, in <module>
+    assert not errors, errors
+           ^^^^^^^^^^
+AssertionError: [{'role': 'B', 'value': {'message': '对方已切换场次，已停止等待旧任务。'}}]

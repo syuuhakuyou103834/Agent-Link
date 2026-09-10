@@ -1,0 +1,90 @@
+[
+  {
+    "suite": "authority",
+    "exit_code": 0,
+    "seconds": 3.99,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\authority.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_authority.py"
+    ],
+    "tests": 5
+  },
+  {
+    "suite": "faults",
+    "exit_code": 0,
+    "seconds": 19.69,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\faults.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_faults.py"
+    ],
+    "tests": 8
+  },
+  {
+    "suite": "peer_review",
+    "exit_code": 0,
+    "seconds": 20.19,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\peer_review.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_peer_review.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "failure_recovery",
+    "exit_code": 1,
+    "seconds": 4.98,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\failure_recovery.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_failure_recovery.py"
+    ],
+    "tests": 1
+  },
+  {
+    "suite": "read_memory",
+    "exit_code": 0,
+    "seconds": 0.18,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\read_memory.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_read_memory.py"
+    ],
+    "tests": 2
+  },
+  {
+    "suite": "gui",
+    "exit_code": 0,
+    "seconds": 10.44,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\gui.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_gui.py"
+    ],
+    "tests": null
+  },
+  {
+    "suite": "windows_startup",
+    "exit_code": 0,
+    "seconds": 1.18,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\windows_startup.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_windows_startup.py"
+    ],
+    "tests": null
+  },
+  {
+    "suite": "endurance",
+    "exit_code": 1,
+    "seconds": 2.74,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-022745\\endurance.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_endurance.py"
+    ],
+    "tests": null
+  }
+]

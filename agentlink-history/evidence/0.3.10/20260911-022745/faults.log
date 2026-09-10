@@ -1,0 +1,13 @@
+test_T07_auth_transport_crash_one_received_request_each_no_retry (__main__.ServiceFaults.test_T07_auth_transport_crash_one_received_request_each_no_retry) ... ok
+test_T07_upstream_timeout_fails_no_retry (__main__.ServiceFaults.test_T07_upstream_timeout_fails_no_retry) ... ok
+test_T07_content_refusal_is_normal_completed_text (__main__.ServiceFaults.test_T07_content_refusal_is_normal_completed_text) ... ok
+test_T06_stop_before_commit_all_three_phases (__main__.ServiceFaults.test_T06_stop_before_commit_all_three_phases) ... ok
+test_T12_stranded_job_blocks_new_admission_until_terminal_fence (__main__.ServiceFaults.test_T12_stranded_job_blocks_new_admission_until_terminal_fence) ... ok
+test_T17_old_result_in_new_job_rejected_before_revision (__main__.ComponentFaults.test_T17_old_result_in_new_job_rejected_before_revision) ... ok
+test_T11_result_cached_shared_publish_fails_no_resend (__main__.ComponentFaults.test_T11_result_cached_shared_publish_fails_no_resend) ... ok
+test_T13_adapter_declines_all_extra_approval_requests (__main__.ApprovalTests.test_T13_adapter_declines_all_extra_approval_requests) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 19.468s
+
+OK

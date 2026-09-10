@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "scope": "A-local-repair-and-validation",
+  "version": "0.3.9",
+  "source_review_zip": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\cleanup-review-20260910\\dist\\AgentLink-0.3.9-Source-Review.zip",
+  "source_review_sha256": "60bad370106040341763b62b4d98be8ea317e4e27a07ddbcb2c3fbb5b5e66746",
+  "archive_files": 1042,
+  "local_sealed_files": 18132,
+  "unit_tests": 73,
+  "hard_windows": 9,
+  "portable_subset": 29,
+  "source_versions": {
+    "installed": "0.3.4",
+    "candidate": "0.3.9"
+  },
+  "shared_upload": "BLOCKED",
+  "B_review": "PENDING",
+  "full_acceptance": false
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "version": "0.3.0",
+    "source_files": 17,
+    "test_files": 5,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.0-Windows-x64.zip",
+    "archive_sha256": "2e8b0fbe566e9a63d28adbbffac7025f2a2f6dd7dcb7169cc1c4d8c55d36c8cf",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.1",
+    "source_files": 20,
+    "test_files": 7,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.1-Windows-x64.zip",
+    "archive_sha256": "bcd765b3b4d6847137f0dc2e7f7992aab426aff857a6921f3997f1cebb2a43d5",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.2",
+    "source_files": 22,
+    "test_files": 8,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.2-Windows-x64.zip",
+    "archive_sha256": "39bc3599d48b5d9b86de09a29da62aa277369c795da840a37b3bb75be38d9645",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.3",
+    "source_files": 23,
+    "test_files": 9,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.3-Windows-x64.zip",
+    "archive_sha256": "2ba7ab7480d150a691234a4393feffe04ca096eefe2f62f73ef1a6df5d64e181",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.4",
+    "source_files": 25,
+    "test_files": 10,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.4-Windows-x64.zip",
+    "archive_sha256": "f2c4fbb919a9dc6143b0613ef7d0c662207488fc6fb12ff657094f6b100780da",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.5",
+    "source_files": 29,
+    "test_files": 15,
+    "archive": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\followup-20260910\\dist\\AgentLink-GUI-0.3.5-Windows-x64.zip",
+    "archive_sha256": "f41d6f085f3a299ae174b78b8c119a4de61ecf468fbf8e63ac4e2cd7ecffb7f1",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.6",
+    "source_files": 30,
+    "test_files": 16,
+    "archive": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\freshness-20260910\\dist\\AgentLink-GUI-0.3.6-Windows-x64.zip",
+    "archive_sha256": "265547db9139a2d2d972f8c9472480ffabe01f464fd8c8fcb4f3a968354e9c30",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.7",
+    "source_files": 33,
+    "test_files": 18,
+    "archive": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\crash-20260910\\dist\\AgentLink-GUI-0.3.7-Windows-x64.zip",
+    "archive_sha256": "5924f1d9164c30e12ca6d37abdc6d3bb46113a3a9e67460247402310fe2601e4",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.8",
+    "source_files": 34,
+    "test_files": 19,
+    "archive": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\workspace\\containment-20260910\\dist\\AgentLink-GUI-0.3.8-Windows-x64.zip",
+    "archive_sha256": "1250bb914233bb40e9a92c9737bed4d5680a846502055badd557c9496eb7dae3",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.9",
+    "source_files": 35,
+    "test_files": 20,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.9-Windows-x64.zip",
+    "archive_sha256": "4e44c7fb7b120738bbe9ed1a829c754f086e62f769d603965a9f17252a89ef39",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  },
+  {
+    "version": "0.3.10",
+    "source_files": 40,
+    "test_files": 25,
+    "archive": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.10-Windows-x64.zip",
+    "archive_sha256": "1d2b3ba7855b1e0bb041cbab9aa65ef2717ad0c6e01093461d82cb33b742e50c",
+    "method": "byte-identical source/ entries from existing Windows release ZIP"
+  }
+]

@@ -1,0 +1,19 @@
+test_T07_T11_T12_repeated_failures_then_valid_next_job (__main__.FailureRecovery.test_T07_T11_T12_repeated_failures_then_valid_next_job) ... ERROR
+
+======================================================================
+ERROR: test_T07_T11_T12_repeated_failures_then_valid_next_job (__main__.FailureRecovery.test_T07_T11_T12_repeated_failures_then_valid_next_job)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\AgentLink-integrated-0.3.10\source\tests\test_failure_recovery.py", line 111, in test_T07_T11_T12_repeated_failures_then_valid_next_job
+    'fault_location': {'timeout':'model request running; accelerated timeout',
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        'cancel':'model request running; submitted cancellation',
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        'publish_failure':'model returned and local result saved; shared result write denied'}[mode],
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'upstream_timeout'
+
+----------------------------------------------------------------------
+Ran 1 test in 4.756s
+
+FAILED (errors=1)

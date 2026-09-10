@@ -1,0 +1,7 @@
+test_oversized_record_still_rejected (__main__.ReadMemoryTests.test_oversized_record_still_rejected) ... ok
+test_small_record_peak_allocation_below_one_mib (__main__.ReadMemoryTests.test_small_record_peak_allocation_below_one_mib) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.031s
+
+OK

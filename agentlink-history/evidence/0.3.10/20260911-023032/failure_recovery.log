@@ -1,0 +1,6 @@
+test_T07_T11_T12_repeated_failures_then_valid_next_job (__main__.FailureRecovery.test_T07_T11_T12_repeated_failures_then_valid_next_job) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 55.480s
+
+OK

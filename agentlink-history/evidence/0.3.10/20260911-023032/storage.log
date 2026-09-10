@@ -1,0 +1,11 @@
+test_failed_publish_preserves_old_data_and_cleans_temp (__main__.StorageTests.test_failed_publish_preserves_old_data_and_cleans_temp) ... ok
+test_missing_and_invalid_json_are_distinct (__main__.StorageTests.test_missing_and_invalid_json_are_distinct) ... ok
+test_old_reader_errno13_when_writer_has_delete_access (__main__.StorageTests.test_old_reader_errno13_when_writer_has_delete_access) ... ok
+test_persistent_permission_error_not_hidden_as_empty (__main__.StorageTests.test_persistent_permission_error_not_hidden_as_empty) ... ok
+test_transient_read_denial_recovers (__main__.StorageTests.test_transient_read_denial_recovers) ... ok
+test_writer_waits_for_reader_and_lock_is_reusable (__main__.StorageTests.test_writer_waits_for_reader_and_lock_is_reusable) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.467s
+
+OK

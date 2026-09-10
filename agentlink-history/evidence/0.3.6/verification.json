@@ -1,0 +1,93 @@
+{
+  "version": "0.3.6",
+  "evidence_integrity": "PASS",
+  "files_verified": 7460,
+  "manifest_sha256": "0b3c4a6402df34fbc22286a6a863c0407720e03632d1ffb024ca5de28e392edf",
+  "unit_cases_passed": 59,
+  "suites": [
+    {
+      "suite": "storage",
+      "unit_cases": 6,
+      "status": "PASS",
+      "log": "evidence\\210947-storage.log"
+    },
+    {
+      "suite": "context",
+      "unit_cases": 8,
+      "status": "PASS",
+      "log": "evidence\\210947-context.log"
+    },
+    {
+      "suite": "system",
+      "unit_cases": 6,
+      "status": "PASS",
+      "log": "evidence\\210947-system.log"
+    },
+    {
+      "suite": "repairs",
+      "unit_cases": 9,
+      "status": "PASS",
+      "log": "evidence\\210947-repairs.log"
+    },
+    {
+      "suite": "gaps",
+      "unit_cases": 6,
+      "status": "PASS",
+      "log": "evidence\\210947-gaps.log"
+    },
+    {
+      "suite": "faults",
+      "unit_cases": 8,
+      "status": "PASS",
+      "log": "evidence\\210947-faults.log"
+    },
+    {
+      "suite": "read_memory",
+      "unit_cases": 2,
+      "status": "PASS",
+      "log": "evidence\\210947-read_memory.log"
+    },
+    {
+      "suite": "peer_review",
+      "unit_cases": 6,
+      "status": "PASS",
+      "log": "evidence\\210947-peer_review.log"
+    },
+    {
+      "suite": "failure_recovery",
+      "unit_cases": 1,
+      "status": "PASS",
+      "log": "evidence\\210947-failure_recovery.log"
+    },
+    {
+      "suite": "freshness",
+      "unit_cases": 7,
+      "status": "PASS",
+      "log": "evidence\\210947-freshness.log"
+    },
+    {
+      "suite": "gui",
+      "unit_cases": 0,
+      "status": "PASS",
+      "log": "evidence\\210947-gui.log"
+    },
+    {
+      "suite": "windows_startup",
+      "unit_cases": 0,
+      "status": "PASS",
+      "log": "evidence\\210947-windows_startup.log"
+    }
+  ],
+  "source_app_sha256": {
+    "context.py": "ec4c4a3f1c4653cf5125bc67c04793f369869735fab015a218e0d5aa41a912de",
+    "engine.py": "63fe1a89ae41ba3f0d967930b144b0224b5478613935c1a0046d95fd097511be",
+    "protocol.py": "46ace3ab28cdc1cab7e362ee5f305c2854b0faf25d771fe83714e3911a5f3427",
+    "storage.py": "71fe5fd336155f776b857cd1eb6bf4b40fda205cb25e88347b8e330627e3eaa7",
+    "ui.py": "ee333b4c9422d130f8bccc626b30d8ea176c27cb998a5693ea7d7d79dbe6eca6",
+    "__init__.py": "e7d5cdcfeddd108551fce3f6a3a740f8c2428914ce7173fe1d2cfe282f17b919"
+  },
+  "zip_sha256": "265547db9139a2d2d972f8c9472480ffabe01f464fd8c8fcb4f3a968354e9c30",
+  "mixed_version_rows": 8,
+  "mixed_version_failures": 2,
+  "real_two_pc_acceptance": "NOT_ESTABLISHED"
+}

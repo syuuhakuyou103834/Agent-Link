@@ -1,0 +1,14 @@
+test_T17_completed_wins_late_cancel_failure_resume (__main__.RepairComponentTests.test_T17_completed_wins_late_cancel_failure_resume) ... ok
+test_T17_replaced_active_before_old_stream_and_result (__main__.RepairComponentTests.test_T17_replaced_active_before_old_stream_and_result) ... ok
+test_T17_stop_committed_before_result (__main__.RepairComponentTests.test_T17_stop_committed_before_result) ... ok
+test_T18_nine_invalid_meta_via_receiver_zero_claims_history_unchanged (__main__.RepairComponentTests.test_T18_nine_invalid_meta_via_receiver_zero_claims_history_unchanged) ... ok
+test_T18_request_protocol_and_legal_control (__main__.RepairComponentTests.test_T18_request_protocol_and_legal_control) ... ok
+test_T08_different_requests_simultaneous_admission_one_job_three_requests (__main__.RepairServiceTests.test_T08_different_requests_simultaneous_admission_one_job_three_requests) ... ok
+test_T08_running_duplicate_not_queued_and_request_id_replay_after_restart (__main__.RepairServiceTests.test_T08_running_duplicate_not_queued_and_request_id_replay_after_restart) ... ok
+test_T08_same_request_simultaneous_admission_one_job_three_requests (__main__.RepairServiceTests.test_T08_same_request_simultaneous_admission_one_job_three_requests) ... ok
+test_T17_new_service_job_before_old_receiver_result (__main__.RepairServiceTests.test_T17_new_service_job_before_old_receiver_result) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 21.732s
+
+OK

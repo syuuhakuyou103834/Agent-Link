@@ -1,0 +1,51 @@
+{
+  "version": "0.3.4",
+  "scope": "local synthetic comparison; zero external model calls",
+  "cases": {
+    "load_034_settings_timeout_zero": {
+      "result": {
+        "timeout": 0
+      }
+    },
+    "default_timeout": {
+      "result": 0
+    },
+    "continue_034_protocol2_history": {
+      "result": 1
+    },
+    "late_old_turn_event": {
+      "result": {
+        "status": "running",
+        "answer": ""
+      }
+    },
+    "queued_cancel_after_selection_changed": {
+      "result": {
+        "old_status": "running",
+        "new_status": "cancelled"
+      }
+    },
+    "note_id_dedup": {
+      "result": [
+        "同样内容",
+        "同样内容",
+        "同样内容"
+      ]
+    },
+    "healthy_turn_over_900_seconds_virtual_clock": {
+      "result": "completed",
+      "client_methods": [
+        "turn/start"
+      ]
+    },
+    "export_unfinished_progress": {
+      "result": {
+        "partial_present": true,
+        "task_id_present": true
+      }
+    },
+    "execution_status_display": {
+      "result": true
+    }
+  }
+}

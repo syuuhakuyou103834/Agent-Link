@@ -1,0 +1,52 @@
+{
+  "version": "0.3.9",
+  "scope": "local synthetic comparison; zero external model calls",
+  "cases": {
+    "load_034_settings_timeout_zero": {
+      "error_type": "ValueError",
+      "error": "单次超时应在 30 到 3600 秒之间"
+    },
+    "default_timeout": {
+      "result": 900
+    },
+    "continue_034_protocol2_history": {
+      "error_type": "ValueError",
+      "error": "所选历史缺失或不兼容，未启动模型。"
+    },
+    "late_old_turn_event": {
+      "result": {
+        "status": "running",
+        "answer": ""
+      }
+    },
+    "queued_cancel_after_selection_changed": {
+      "result": {
+        "old_status": "cancelled",
+        "new_status": "running"
+      }
+    },
+    "note_id_dedup": {
+      "result": [
+        "同样内容",
+        "同样内容"
+      ]
+    },
+    "healthy_turn_over_900_seconds_virtual_clock": {
+      "error_type": "Cancelled",
+      "error": "当前调用超时，正在停止。",
+      "client_methods": [
+        "turn/start",
+        "turn/interrupt"
+      ]
+    },
+    "export_unfinished_progress": {
+      "result": {
+        "partial_present": false,
+        "task_id_present": false
+      }
+    },
+    "execution_status_display": {
+      "result": false
+    }
+  }
+}

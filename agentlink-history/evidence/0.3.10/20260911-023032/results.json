@@ -1,0 +1,211 @@
+[
+  {
+    "suite": "authority",
+    "exit_code": 0,
+    "seconds": 3.45,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\authority.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_authority.py"
+    ],
+    "tests": 5
+  },
+  {
+    "suite": "cleanup_admission",
+    "exit_code": 0,
+    "seconds": 14.77,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\cleanup_admission.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_cleanup_admission.py"
+    ],
+    "tests": 2
+  },
+  {
+    "suite": "cleanup_failures",
+    "exit_code": 0,
+    "seconds": 1.17,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\cleanup_failures.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_cleanup_failures.py"
+    ],
+    "tests": 4
+  },
+  {
+    "suite": "context",
+    "exit_code": 0,
+    "seconds": 3.66,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\context.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_context.py"
+    ],
+    "tests": 8
+  },
+  {
+    "suite": "endurance",
+    "exit_code": 0,
+    "seconds": 195.59,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\endurance.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_endurance.py"
+    ],
+    "tests": null
+  },
+  {
+    "suite": "failure_recovery",
+    "exit_code": 0,
+    "seconds": 55.69,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\failure_recovery.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_failure_recovery.py"
+    ],
+    "tests": 1
+  },
+  {
+    "suite": "faults",
+    "exit_code": 0,
+    "seconds": 21.08,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\faults.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_faults.py"
+    ],
+    "tests": 8
+  },
+  {
+    "suite": "freshness",
+    "exit_code": 0,
+    "seconds": 3.88,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\freshness.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_freshness.py"
+    ],
+    "tests": 7
+  },
+  {
+    "suite": "gaps",
+    "exit_code": 0,
+    "seconds": 3.7,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\gaps.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_gaps.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "gui",
+    "exit_code": 0,
+    "seconds": 10.92,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\gui.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_gui.py"
+    ],
+    "tests": null
+  },
+  {
+    "suite": "integration_upgrade",
+    "exit_code": 0,
+    "seconds": 2.21,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\integration_upgrade.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_integration_upgrade.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "peer_review",
+    "exit_code": 0,
+    "seconds": 21.04,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\peer_review.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_peer_review.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "process_job",
+    "exit_code": 0,
+    "seconds": 8.95,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\process_job.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_process_job.py"
+    ],
+    "tests": 3
+  },
+  {
+    "suite": "read_memory",
+    "exit_code": 0,
+    "seconds": 0.18,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\read_memory.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_read_memory.py"
+    ],
+    "tests": 2
+  },
+  {
+    "suite": "repairs",
+    "exit_code": 0,
+    "seconds": 21.93,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\repairs.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_repairs.py"
+    ],
+    "tests": 9
+  },
+  {
+    "suite": "storage",
+    "exit_code": 0,
+    "seconds": 0.63,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\storage.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_storage.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "system",
+    "exit_code": 0,
+    "seconds": 36.72,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\system.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_system.py"
+    ],
+    "tests": 6
+  },
+  {
+    "suite": "waiting",
+    "exit_code": 0,
+    "seconds": 11.61,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\waiting.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_waiting.py"
+    ],
+    "tests": 11
+  },
+  {
+    "suite": "windows_startup",
+    "exit_code": 0,
+    "seconds": 1.02,
+    "log": "C:\\AgentLink-integrated-0.3.10\\evidence\\20260911-023032\\windows_startup.log",
+    "command": [
+      "C:\\Program Files\\Python\\python_3.13\\python.exe",
+      "tests/test_windows_startup.py"
+    ],
+    "tests": null
+  }
+]

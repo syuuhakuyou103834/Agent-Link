@@ -1,0 +1,10 @@
+test_T12_stale_peer_does_not_release_inflight_discussion (__main__.AuthorityTests.test_T12_stale_peer_does_not_release_inflight_discussion) ... ok
+test_T12_peer_role_lock_lost_does_not_release_inflight_discussion (__main__.AuthorityTests.test_T12_peer_role_lock_lost_does_not_release_inflight_discussion) ... ok
+test_T12_peer_instance_replaced_does_not_release_inflight_discussion (__main__.AuthorityTests.test_T12_peer_instance_replaced_does_not_release_inflight_discussion) ... ok
+test_T12_executor_role_lock_lost_does_not_release_inflight_discussion (__main__.AuthorityTests.test_T12_executor_role_lock_lost_does_not_release_inflight_discussion) ... ok
+test_T12_executor_instance_replaced_does_not_release_inflight_discussion (__main__.AuthorityTests.test_T12_executor_instance_replaced_does_not_release_inflight_discussion) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 3.259s
+
+OK

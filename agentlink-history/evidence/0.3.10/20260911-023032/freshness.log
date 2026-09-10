@@ -1,0 +1,12 @@
+test_T18_exit_after_final_gate_may_cost_one_request_but_no_continuation (__main__.FreshnessTests.test_T18_exit_after_final_gate_may_cost_one_request_but_no_continuation) ... ok
+test_T18_queued_admission_cannot_rebind_to_restarted_peer (__main__.FreshnessTests.test_T18_queued_admission_cannot_rebind_to_restarted_peer) ... ok
+test_T18_expired_offline_invalid_and_replaced_capability_rejected (__main__.FreshnessTests.test_T18_expired_offline_invalid_and_replaced_capability_rejected) ... ok
+test_T18_unheld_peer_role_lease_rejects_recent_capabilities (__main__.FreshnessTests.test_T18_unheld_peer_role_lease_rejects_recent_capabilities) ... ok
+test_T18_peer_exits_during_thread_setup_zero_model_requests (__main__.FreshnessTests.test_T18_peer_exits_during_thread_setup_zero_model_requests) ... ok
+test_T18_restart_between_gate_and_send_does_not_rebind_old_job (__main__.FreshnessTests.test_T18_restart_between_gate_and_send_does_not_rebind_old_job) ... ok
+test_T05_cross_job_reuse_and_cross_node_collision_are_explicit (__main__.FreshnessTests.test_T05_cross_job_reuse_and_cross_node_collision_are_explicit) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 3.656s
+
+OK

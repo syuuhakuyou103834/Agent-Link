@@ -1,0 +1,49 @@
+{
+  "version": "0.3.2",
+  "package": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.2-Windows-x64.zip",
+  "package_sha256": "39bc3599d48b5d9b86de09a29da62aa277369c795da840a37b3bb75be38d9645",
+  "extracted_to": "C:\\AgentLink-GUI\\verify-0.3.2-20260910-155923",
+  "real_two_pc_model_test": "NOT_RUN",
+  "tests": [
+    {
+      "script": "test_context.py",
+      "runtime": "extracted bundled Python",
+      "exit_code": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.2-test_context.py.log",
+      "log_sha256": "d0b0c334b13ce978b3e1bfeacfdeaa7f2b489f42d2de5254a42e6762ac76fc58"
+    },
+    {
+      "script": "test_gui.py",
+      "runtime": "extracted bundled Python",
+      "exit_code": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.2-test_gui.py.log",
+      "log_sha256": "5f79bed6c895491d0a89fb608b6ed7b7dc41f6d69ceccaaae2234ea3d392ddb0"
+    },
+    {
+      "script": "test_windows_startup.py",
+      "runtime": "extracted bundled Python",
+      "exit_code": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.2-test_windows_startup.py.log",
+      "log_sha256": "33b8cf6bc75f8e09755e282567e59ae51e35a2ef69db8e83fd8cc4e2a9125bd1"
+    }
+  ],
+  "status": "PASS_LOCAL_ONLY",
+  "extraction": {
+    "verified_files": 115,
+    "hash_mismatches": []
+  },
+  "source_mismatches": [],
+  "source_system_tests": {
+    "main_log": "C:\\AgentLink-GUI\\test-output\\system-continuity-0.3.2.log",
+    "main_log_sha256": "8462cb1b3b3f2d479d0fb19db338f882aa5c309ec60661c36dc0bbe63c8a5b61",
+    "completed_cases_in_main_log": 5,
+    "cancel_log": "C:\\AgentLink-GUI\\test-output\\system-cancel-0.3.2.log",
+    "cancel_log_sha256": "27733018e2d14950f917dbf10543c587f6dd486ca5b3c851bcc5dcfa6d77babc",
+    "note": "Runner output collection interrupted by host network-policy error; five completed cases retained, final cancellation case run separately with exit 0."
+  },
+  "source_unit_tests_observed": {
+    "context": 8,
+    "windows_storage": 6,
+    "note": "Both source suites returned exit 0 in command results; context additionally rerun using packaged runtime with log above."
+  }
+}

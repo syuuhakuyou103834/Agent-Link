@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "spec": {
+    "warmup": 10,
+    "measured": 100,
+    "rounds": 1,
+    "stream_delay_seconds": 0.002,
+    "topic_sha256": "1d07374ecd8ac002ee2a6aa322ff7df8eba6dcb0ba67d3777ecf1389d8febd83",
+    "metric": "sum of private bytes and handle counts for harness + 2 mock subprocesses",
+    "growth_threshold": 0.2,
+    "compare": "medians of first/last 20 measured jobs",
+    "layer": "local two services, local filesystem, offline App Server subprocesses"
+  },
+  "requests": 330,
+  "growth": {
+    "private_bytes": {
+      "first_median": 37632000.0,
+      "last_median": 37660672.0,
+      "growth": 0.0007619047619047414
+    },
+    "handles": {
+      "first_median": 307.0,
+      "last_median": 307.0,
+      "growth": 0.0
+    }
+  },
+  "mock_processes_exited": true
+}

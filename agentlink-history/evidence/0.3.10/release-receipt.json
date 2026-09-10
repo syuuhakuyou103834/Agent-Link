@@ -1,0 +1,12 @@
+{
+  "version": "0.3.10",
+  "zip": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.10-Windows-x64.zip",
+  "directory": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.10",
+  "launcher": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.10\\AgentLink.exe",
+  "sha256": "1d2b3ba7855b1e0bb041cbab9aa65ef2717ad0c6e01093461d82cb33b742e50c",
+  "verified_files": 134,
+  "source": "C:\\AgentLink-integrated-0.3.10\\source",
+  "previous_versions_preserved": true,
+  "running_installation_replaced": false,
+  "validation": "local tests and native launcher checks; real two-PC acceptance outstanding"
+}

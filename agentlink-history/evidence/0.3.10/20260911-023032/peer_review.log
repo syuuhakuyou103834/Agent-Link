@@ -1,0 +1,11 @@
+test_T11_cancel_before_model_request_zero_send (__main__.ReviewComponents.test_T11_cancel_before_model_request_zero_send) ... ok
+test_T11_published_result_ack_lost_no_repeat (__main__.ReviewComponents.test_T11_published_result_ack_lost_no_repeat) ... ok
+test_T05_note_id_replay_deduplicates_but_equal_text_new_id_preserved (__main__.ReviewComponents.test_T05_note_id_replay_deduplicates_but_equal_text_new_id_preserved) ... ok
+test_T18_missing_safety_feature_rejected_in_both_directions (__main__.ReviewComponents.test_T18_missing_safety_feature_rejected_in_both_directions) ... ok
+test_T05_duplicate_resume_does_not_add_calls_or_revive_cancelled (__main__.ReviewServices.test_T05_duplicate_resume_does_not_add_calls_or_revive_cancelled) ... ok
+test_T17_late_error_after_new_job_started_preserves_both_jobs (__main__.ReviewServices.test_T17_late_error_after_new_job_started_preserves_both_jobs) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 20.840s
+
+OK

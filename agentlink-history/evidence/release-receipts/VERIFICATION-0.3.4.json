@@ -1,0 +1,538 @@
+{
+  "version": "0.3.4",
+  "package": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.4-Windows-x64.zip",
+  "sha256": "f2c4fbb919a9dc6143b0613ef7d0c662207488fc6fb12ff657094f6b100780da",
+  "extracted_to": "C:\\AgentLink-GUI\\verify-0.3.4-20260910-194037",
+  "status": "PASS_LOCAL_ONLY",
+  "source_tests": [
+    {
+      "suite": "waiting-final",
+      "passed": 11,
+      "log": "C:\\AgentLink-GUI\\test-output\\waiting-final-0.3.4.log",
+      "sha256": "8d758c34bb4afd12c9797419b9f7b67bcd98d6c0dd7a4c3f59ee4713d54ede42"
+    },
+    {
+      "suite": "repairs",
+      "passed": 9,
+      "log": "C:\\AgentLink-GUI\\test-output\\repairs-0.3.4.log",
+      "sha256": "f382b36c5d30363a65dd25321c362603e7fb1046731efa472785934e2519dbec"
+    },
+    {
+      "suite": "system",
+      "passed": 6,
+      "log": "C:\\AgentLink-GUI\\test-output\\system-0.3.4.log",
+      "sha256": "e51e51706dd8d7c4b40372b4ba52d2e337c7e3abb5c2bf7375d2ad3a0cf938cb"
+    },
+    {
+      "suite": "context",
+      "passed": 8,
+      "log": "C:\\AgentLink-GUI\\test-output\\context-0.3.4.log",
+      "sha256": "6cda58a3fa29f892d6e45abd6a2d6dff156b4573f7abab11b56b0d50058b289d"
+    },
+    {
+      "suite": "storage",
+      "passed": 6,
+      "log": "C:\\AgentLink-GUI\\test-output\\storage-0.3.4.log",
+      "sha256": "536aeaacc144fdb9e2722341cfb7384c23f6885efcbc5ae13ae8fc820d1787d4"
+    }
+  ],
+  "package_tests": [
+    {
+      "suite": "test_waiting.py",
+      "returncode": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.4-test_waiting.py.log",
+      "sha256": "74fde18fed060858ae0d69aac714f55b6608e06f7ce6d640463c57e62c0d810d"
+    },
+    {
+      "suite": "test_gui.py",
+      "returncode": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.4-test_gui.py.log",
+      "sha256": "5f79bed6c895491d0a89fb608b6ed7b7dc41f6d69ceccaaae2234ea3d392ddb0"
+    },
+    {
+      "suite": "test_windows_startup.py",
+      "returncode": 0,
+      "log": "C:\\AgentLink-GUI\\test-output\\package-0.3.4-test_windows_startup.py.log",
+      "sha256": "33b8cf6bc75f8e09755e282567e59ae51e35a2ef69db8e83fd8cc4e2a9125bd1"
+    }
+  ],
+  "real_model_calls_in_this_verification": 0,
+  "real_two_pc_test": "NOT_RUN",
+  "virtual_time_is_not_wall_time_endurance": true,
+  "source_passed_count": 40,
+  "verified_files": 118,
+  "files": [
+    {
+      "path": "AgentLink.exe",
+      "sha256": "66cd1d3ee9ecda7c36f75878c0cba258245b8103ff0a6bc9fd25f246619e67cb"
+    },
+    {
+      "path": "app/__init__.py",
+      "sha256": "59f77bc4b1f00a1312470062ffc7d049bfe91340708433afba863668a03656ff"
+    },
+    {
+      "path": "app/context.py",
+      "sha256": "0607de830d1b6c81a5e28e86f6b7a9d659d1ff6ec3609dbb14e1f956a7562e86"
+    },
+    {
+      "path": "app/engine.py",
+      "sha256": "f8114213f59fc51b7cacab031f8f1e4381db39fd68741718f1bfcc6e7cecdc79"
+    },
+    {
+      "path": "app/protocol.py",
+      "sha256": "d4e98de4e91dc2fc033f82152c1ce84ab7dec1a3ce223ffe51001755dcf2bf23"
+    },
+    {
+      "path": "app/storage.py",
+      "sha256": "e87930a878c8f763091a6b6fb6ff49b81a1d627bc269359ecf18d42aabb9178b"
+    },
+    {
+      "path": "app/ui.py",
+      "sha256": "005d91324c6e797c5dfd3fc56c6cc54d630d221a94ef3fd73f44568eae4de565"
+    },
+    {
+      "path": "DEBUG-0.3.4.md",
+      "sha256": "83c4b8d01968edc33c0905edbd004ff9060f1de1dc4a99023c5762f7e6bbe429"
+    },
+    {
+      "path": "licenses/GPL-3.0.txt",
+      "sha256": "defad77d3274cf1b4b4a4c771cdb7a69449d68d84bb9ada7c680c7be0b03d442"
+    },
+    {
+      "path": "licenses/NOTICE.txt",
+      "sha256": "9a8ac22d2696bf4db6e816625c6fbd0a8a7688c0a4a7fe0710532cc2857f7821"
+    },
+    {
+      "path": "licenses/PyQt5-5.15.11.dist-info-METADATA.txt",
+      "sha256": "42c9f7b885d8d5af3b48f7510c92a7a4810f76be68d09be9f5591a9d265f7c9b"
+    },
+    {
+      "path": "licenses/PyQt5_Qt5-5.15.2.dist-info-LICENSE",
+      "sha256": "2004ee3ef8282a85f7dbd035dfacf63cf03d569537bc08655ffeb140ea3671c5"
+    },
+    {
+      "path": "licenses/PyQt5_Qt5-5.15.2.dist-info-METADATA.txt",
+      "sha256": "3e41482a04b96a64653c632462f3aa709c412aee131547b85b291073fc3ef6b0"
+    },
+    {
+      "path": "licenses/pyqt5_sip-12.18.0.dist-info-LICENSE",
+      "sha256": "3e6f5b427c36f94ecf86bc01698af7030a1ed6eb3748110d5dbb8d142d804611"
+    },
+    {
+      "path": "licenses/pyqt5_sip-12.18.0.dist-info-METADATA.txt",
+      "sha256": "f0129d970b743851afd47515ccbe5a1632336968263c9667262df7542ad1ce85"
+    },
+    {
+      "path": "licenses/Python-3.13-LICENSE.txt",
+      "sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120"
+    },
+    {
+      "path": "licenses/Qt-LICENSE.txt",
+      "sha256": "2004ee3ef8282a85f7dbd035dfacf63cf03d569537bc08655ffeb140ea3671c5"
+    },
+    {
+      "path": "main.py",
+      "sha256": "57f25b2612dd0f9fe0fe461e4e73cf72c789fe98bbded5122e47b53dfe25bd89"
+    },
+    {
+      "path": "README.md",
+      "sha256": "457e32f8ceaf51a55bd494bd8c1720f304dd225f6658e5766476564841ae72e9"
+    },
+    {
+      "path": "runtime/DLLs/_asyncio.pyd",
+      "sha256": "423007b8c7d63b4cb5f23665a761dd5de1c7e15a65c8013391de0d18c89ce417"
+    },
+    {
+      "path": "runtime/DLLs/_bz2.pyd",
+      "sha256": "1bf985b54f529a3cbb3e52532791cc4d4c64009142d37b54eb3521adec203d5c"
+    },
+    {
+      "path": "runtime/DLLs/_ctypes.pyd",
+      "sha256": "96b07339d52c74f2a1dd043df5eb931e4072eed90a3a8715ffec751d818e4117"
+    },
+    {
+      "path": "runtime/DLLs/_ctypes_test.pyd",
+      "sha256": "715f9b8e149278d1ed74ccd4b92bcb4b451958361d1dc9fa3633fa36a3fe28d5"
+    },
+    {
+      "path": "runtime/DLLs/_decimal.pyd",
+      "sha256": "398117a6af493e34f56ec0d78ced9901b20b8e895686ce5966edeadb23507056"
+    },
+    {
+      "path": "runtime/DLLs/_elementtree.pyd",
+      "sha256": "fbce9a1190a228c59767bde785c27cc4d18ee3a1f6b46e9da042fc86f8d0def7"
+    },
+    {
+      "path": "runtime/DLLs/_hashlib.pyd",
+      "sha256": "50f3ce7a2281fd32f378f3ba5067bdd13e18ee95877db5199c6a0babdc9c516a"
+    },
+    {
+      "path": "runtime/DLLs/_lzma.pyd",
+      "sha256": "51815b6474d4216c6a2aeaffdae5d2ff4acb7a0236254f2cfe43247022f3d781"
+    },
+    {
+      "path": "runtime/DLLs/_multiprocessing.pyd",
+      "sha256": "4df0d8f9da454831e96389c145ac9ea0093e09749627a3717ff60d21218670c8"
+    },
+    {
+      "path": "runtime/DLLs/_overlapped.pyd",
+      "sha256": "53fe68819f23fea7f6deb0054623e936cc2500241061f29bd5288cf4a511278f"
+    },
+    {
+      "path": "runtime/DLLs/_queue.pyd",
+      "sha256": "b5b5368026c33ade7651fb4cf4c6c1ca7eecc9c8cdad0af007da8a3ac0e067f7"
+    },
+    {
+      "path": "runtime/DLLs/_socket.pyd",
+      "sha256": "8676f3cebd9d01c7ad51a29b3f7ff429c0a8f6bc564cab21eb6cdaa2e26fd259"
+    },
+    {
+      "path": "runtime/DLLs/_sqlite3.pyd",
+      "sha256": "bb80e54f2de8aa3cddc00a2a2f893c432d45ecd64a5c55758a4eb6d2e3007127"
+    },
+    {
+      "path": "runtime/DLLs/_ssl.pyd",
+      "sha256": "b8118580b461801df12ec12d3d666aa0ebc2b3750bcf92b90b92789b152bf856"
+    },
+    {
+      "path": "runtime/DLLs/_testbuffer.pyd",
+      "sha256": "6f6188cfca7983fbcb91d98a70ebb547febd07841b4c14b93fd87d4fd14d028c"
+    },
+    {
+      "path": "runtime/DLLs/_testcapi.pyd",
+      "sha256": "4842ec4319bfd5a6896ce7c1589cb741c590e9fd81ffe38bd6877063de358a6d"
+    },
+    {
+      "path": "runtime/DLLs/_testconsole.pyd",
+      "sha256": "d89aa434ec25162ded59dd94ddea994abeecdc17a553e93f51eee26ee4a0bf77"
+    },
+    {
+      "path": "runtime/DLLs/_testimportmultiple.pyd",
+      "sha256": "5188bf342a944a45e04c6f9c78214ab53e30bb22f5f4f2f400c82bab9cbd7c21"
+    },
+    {
+      "path": "runtime/DLLs/_testinternalcapi.pyd",
+      "sha256": "66d225f2cdef16e71bbc3a254c53692c1647a887669d48f25df1f21062b64277"
+    },
+    {
+      "path": "runtime/DLLs/_testlimitedcapi.pyd",
+      "sha256": "fcf217222f23dd33cb8eaed7f733d40584f12fb37a5b8e7c7838e5082f010ff5"
+    },
+    {
+      "path": "runtime/DLLs/_testmultiphase.pyd",
+      "sha256": "84b053623f677c1d8f80950811a7ef92c50fc0f99a18a51977477ee5ef22dec0"
+    },
+    {
+      "path": "runtime/DLLs/_testsinglephase.pyd",
+      "sha256": "74b5030a79d4fe3444d2f7e2b9146f692be906f0fe40febf5b57d1b834cd7c31"
+    },
+    {
+      "path": "runtime/DLLs/_uuid.pyd",
+      "sha256": "0116497261edadfe42ba7daf367c8a9ea27a1db210c8384943c890f532e3ce72"
+    },
+    {
+      "path": "runtime/DLLs/_wmi.pyd",
+      "sha256": "9a7255064ea143895b28efea6d78e9e518bac290900aec52a6a0435c36a172fb"
+    },
+    {
+      "path": "runtime/DLLs/_zoneinfo.pyd",
+      "sha256": "6351ce1ff38815e152bb8f28b884e7b2a3945cbee1b1fefa6117e45953d5751f"
+    },
+    {
+      "path": "runtime/DLLs/libcrypto-3.dll",
+      "sha256": "eaf6d613b95b61a39558d84c50e72630a66c99914292df88e7b54ebd60c5bd34"
+    },
+    {
+      "path": "runtime/DLLs/libffi-8.dll",
+      "sha256": "eff52743773eb550fcc6ce3efc37c85724502233b6b002a35496d828bd7b280a"
+    },
+    {
+      "path": "runtime/DLLs/libssl-3.dll",
+      "sha256": "cf1a5fdcefa3daf69041f31f98ece1d7911ca4fcb8e9f1043b4d0f459ae4c936"
+    },
+    {
+      "path": "runtime/DLLs/pyexpat.pyd",
+      "sha256": "b5f57327418750229656c30a809308669797cf30d7da3705f8cd584c2b8a038b"
+    },
+    {
+      "path": "runtime/DLLs/select.pyd",
+      "sha256": "ddf1221851814943a82ed8a986d228463404da2ada969661bdd69223f14fc050"
+    },
+    {
+      "path": "runtime/DLLs/sqlite3.dll",
+      "sha256": "5932500d09fbd72559173b5abb7f5174d400f968f08680a1090e75b75bb03bc9"
+    },
+    {
+      "path": "runtime/DLLs/unicodedata.pyd",
+      "sha256": "b965a80346ee95dbec0b147faab329f3276ba24fceb8df5df171367649f116f3"
+    },
+    {
+      "path": "runtime/DLLs/winsound.pyd",
+      "sha256": "f23973ff866546525e5ffb63dc9ccc2f88980f320d4ae75168ffcd26c4ccb0cd"
+    },
+    {
+      "path": "runtime/DLLs/zlib1.dll",
+      "sha256": "1dd27f0411ebb31bd148a61589cee254410915f1e6c37aa3ffa52fac71a5426c"
+    },
+    {
+      "path": "runtime/python.exe",
+      "sha256": "dc7ecf75280678175b4f931ce05f1ef9c10d48984399ca7de6beee69d71bcb1b"
+    },
+    {
+      "path": "runtime/python3.dll",
+      "sha256": "cbc4876275178244905ee45a9ee6ec9fa4bfb9aad6209a03b756d38a186f80d1"
+    },
+    {
+      "path": "runtime/python313._pth",
+      "sha256": "2a612caf3b5d95b5c594b07efaf14848546bced57a5acf4316c6e592a3c1468e"
+    },
+    {
+      "path": "runtime/python313.dll",
+      "sha256": "6964e590037c41d631fd1215f05af154f7fa68105993c6f573a20689b473f1ac"
+    },
+    {
+      "path": "runtime/python313.zip",
+      "sha256": "b123a4caf905b5d7141aaaf466ce1fc55e94c04290a4af572da41c783a821d98"
+    },
+    {
+      "path": "runtime/pythonw.exe",
+      "sha256": "e98f517f1fa209c691c57d058e538473c4dedcecacd2e466c3f2bce54fc431f4"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/__init__.py",
+      "sha256": "ecb65b24f49081a9387149bd36d4bfe75856c850a548f8848612d6f2ef401ecf"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/concrt140.dll",
+      "sha256": "1f072a6dc98cd882c542208e7a8fe4fbe5239781588f17c005a2607fdfe62d5d"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/msvcp140.dll",
+      "sha256": "88f55d86b50b0a7e55e71ad2d8f7552146ba26e927230daf2e26ad3a971973c5"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/msvcp140_1.dll",
+      "sha256": "446c48c1224c289bd3080087fe15d6759416d64f4136addf30086abd5415d83f"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/msvcp140_2.dll",
+      "sha256": "24b47c966b6e4a65b3e4df866d347d3427e9bd709be550c38224427eb5e143d3"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/Qt5Core.dll",
+      "sha256": "8d2ff4ce9096ddccc4f4cd62c2e41fc854cfd1b0d6e8d296645a7f5fd4ae565a"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/Qt5Gui.dll",
+      "sha256": "5e7d2d41b8b92a880e83b8cc0ca173f5da61218604186196787ee1600956be1e"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/Qt5Svg.dll",
+      "sha256": "7348cfc6444438b8845fb3f59381227325d40ca2187d463e82fc7b8e93e38db5"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/Qt5Test.dll",
+      "sha256": "a0b9002635c696a5a24ee5b83669a28f7955c7937c1b4ffe925e3c3829c9deff"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/Qt5Widgets.dll",
+      "sha256": "3788c669d4b645e5a576de9fc77fca776bf516d43c89143dc2ca28291ba14358"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/vcruntime140.dll",
+      "sha256": "5e197a086b6a7711baa09afe4ea7c68f0e777b2ff33f1df25a21f375b7d9693a"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/bin/vcruntime140_1.dll",
+      "sha256": "1f0f5f2ce671e0f68cf96176721df0e5e6f527c8ca9cfa98aa875b5a3816d460"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/iconengines/qsvgicon.dll",
+      "sha256": "42dde60befcf1d9f96b8366a9988626b97d7d0d829ebea32f756d6ecd9ea99a8"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qgif.dll",
+      "sha256": "36174dd4c5f37c5f065c7a26e0ac65c4c3a41fdc0416882af856a23a5d03bb9d"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qicns.dll",
+      "sha256": "f4a229a082d16f80016f366156a2b951550f1e9df6d4177323bbedd92a429909"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qico.dll",
+      "sha256": "1982a635db9652304131c9c6ff9a693e70241600d2ef22b354962aa37997de0b"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qjpeg.dll",
+      "sha256": "fb4e980cb5fafa8a4cd4239329aed93f7c32ed939c94b61fb2df657f3c6ad158"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qsvg.dll",
+      "sha256": "b3498f0a10ac4cb42cf7213db4944a34594ff36c78c50a0f249c9085d1b1ff39"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qtga.dll",
+      "sha256": "5b641dec81aec1cf7ac0cce9fc067bb642fbd32da138a36e3bdac3bb5b36c37a"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qtiff.dll",
+      "sha256": "825174429ced6b3dab18115dbc6c9da07bf5248c86ec1bd5c0dcaeca93b4c22d"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qwbmp.dll",
+      "sha256": "0f05969fb926a62a338782b32446ea3e28e4bfbffc0dbd25ed303fab3404abac"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/imageformats/qwebp.dll",
+      "sha256": "6e37acd0d357871f92b7fde7206c904c734caa02f94544df646957df8c4987af"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/platforms/qminimal.dll",
+      "sha256": "05d1e7364dd2a672df3ca44dd6fd85bed3d3dc239dcfe29bfb464f10b4daa628"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/platforms/qoffscreen.dll",
+      "sha256": "54097626faae718a4bc8e436c85b4ded8f8fb7051b2b9563a29aee4ed5c32b7b"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/platforms/qwebgl.dll",
+      "sha256": "9c3b2fa2383eeed92bb5810bdcf893ae30fa654a30b453ab2e49a95e1ccf1631"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/platforms/qwindows.dll",
+      "sha256": "3333ba244c97264e3bd19db5953efa80a6e47aaced9d337ac3287ec718162b85"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/Qt5/plugins/styles/qwindowsvistastyle.dll",
+      "sha256": "d9b21182952682fe7ba63af1df24e23ace592c35b3f31eceef9f0eabeb5881b9"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/QtCore.pyd",
+      "sha256": "d6e45fd8c3b3f93f52c4d1b6f9e3ee220454a73f80f65f3d70504bd55415ea37"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/QtGui.pyd",
+      "sha256": "a9408e3b15ff3030f0e9acb3429000d253d3bb7206f750091a7130325f6d0d72"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/QtTest.pyd",
+      "sha256": "d64b8bac1627edd8d9b5dfab0e8cf583323db4cb8e78b496b01dc827f3e6f23c"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/QtWidgets.pyd",
+      "sha256": "a1e97a2ab434c6ae5e56491c60172e59cdcce42960734e8bdf5d851b79361071"
+    },
+    {
+      "path": "runtime/site-packages/PyQt5/sip.cp313-win_amd64.pyd",
+      "sha256": "7a54c971af695af612a1cda68924a2170d4a2afe48dd32770b60fde5b2dd7dab"
+    },
+    {
+      "path": "runtime/vcruntime140.dll",
+      "sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4"
+    },
+    {
+      "path": "runtime/vcruntime140_1.dll",
+      "sha256": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8"
+    },
+    {
+      "path": "source/app/__init__.py",
+      "sha256": "59f77bc4b1f00a1312470062ffc7d049bfe91340708433afba863668a03656ff"
+    },
+    {
+      "path": "source/app/context.py",
+      "sha256": "0607de830d1b6c81a5e28e86f6b7a9d659d1ff6ec3609dbb14e1f956a7562e86"
+    },
+    {
+      "path": "source/app/engine.py",
+      "sha256": "f8114213f59fc51b7cacab031f8f1e4381db39fd68741718f1bfcc6e7cecdc79"
+    },
+    {
+      "path": "source/app/protocol.py",
+      "sha256": "d4e98de4e91dc2fc033f82152c1ce84ab7dec1a3ce223ffe51001755dcf2bf23"
+    },
+    {
+      "path": "source/app/storage.py",
+      "sha256": "e87930a878c8f763091a6b6fb6ff49b81a1d627bc269359ecf18d42aabb9178b"
+    },
+    {
+      "path": "source/app/ui.py",
+      "sha256": "005d91324c6e797c5dfd3fc56c6cc54d630d221a94ef3fd73f44568eae4de565"
+    },
+    {
+      "path": "source/BUILDING.txt",
+      "sha256": "92d5b0e5c817678bf641e6d0ed55b7c1163f768279d2785a68439720ed317575"
+    },
+    {
+      "path": "source/DEBUG-0.3.4.md",
+      "sha256": "83c4b8d01968edc33c0905edbd004ff9060f1de1dc4a99023c5762f7e6bbe429"
+    },
+    {
+      "path": "source/main.py",
+      "sha256": "57f25b2612dd0f9fe0fe461e4e73cf72c789fe98bbded5122e47b53dfe25bd89"
+    },
+    {
+      "path": "source/packaging/app.manifest",
+      "sha256": "4fda35778ed525e4bd886730b57e8f40a3f09a297182c5b2e027cdb71f22dc45"
+    },
+    {
+      "path": "source/packaging/build.py",
+      "sha256": "1899d3ce795108d0c0e5c7c045d6c11a5af3770283136aac26ad1a05d3192218"
+    },
+    {
+      "path": "source/packaging/Launcher.cs",
+      "sha256": "71d21fc237354cabf3c89a51d14c917ccb4a74b88177aca85f553bb8bb55b0cd"
+    },
+    {
+      "path": "source/packaging/Setup.cs",
+      "sha256": "7ebe072ea89eb2bdaa13c8b79fe42b1fe9f3d7cb48a15b7b1729563b6e8c71db"
+    },
+    {
+      "path": "source/README.md",
+      "sha256": "457e32f8ceaf51a55bd494bd8c1720f304dd225f6658e5766476564841ae72e9"
+    },
+    {
+      "path": "source/RECOVERED-0.3.3.md",
+      "sha256": "d16da7d41fcd2f178502779b9ee9dbe48fec444b0a39cc4670b220574c880afa"
+    },
+    {
+      "path": "source/tests/check_real_protocol.py",
+      "sha256": "f526b3e3297b5d5938768e46c91f7d722661a7d8143c711be172b8b8676fa500"
+    },
+    {
+      "path": "source/tests/mock_server.py",
+      "sha256": "b1eac772ba8a071523c1c1cafa327fe38e832eee48659c8fa03494c21d401046"
+    },
+    {
+      "path": "source/tests/smb_probe.py",
+      "sha256": "2fe709421d78832fed21305119b5960cab5ff648042816fa55830ea49eea5809"
+    },
+    {
+      "path": "source/tests/test_context.py",
+      "sha256": "d4a0f7edb7ec1b481c58078e611beb755c9882e10dacb4650a7cb309fb959ad5"
+    },
+    {
+      "path": "source/tests/test_gui.py",
+      "sha256": "e534232079faa438a0fca99b6df8b4084424d48d9e0d2c76dc92b0e1f863fec7"
+    },
+    {
+      "path": "source/tests/test_repairs.py",
+      "sha256": "66ee7091cba5b20749ee1d6880c306fe4eee55e1236651b4fe39c5de57b7a4eb"
+    },
+    {
+      "path": "source/tests/test_storage.py",
+      "sha256": "8b62c1bb0ce01e6f9aece8505ce203a1a56a03d0d17655fa994ed012c4e0af47"
+    },
+    {
+      "path": "source/tests/test_system.py",
+      "sha256": "df7faa5f825758691b39881f1d291849596928966128ec88b963bc35004e69cd"
+    },
+    {
+      "path": "source/tests/test_waiting.py",
+      "sha256": "75f66f4772ecf6d9de7b34dca0175bb331d6d67b7d80881d287652d7c1ddbbc9"
+    },
+    {
+      "path": "source/tests/test_windows_startup.py",
+      "sha256": "cde85d9d9287820e204a3a20811c0e2a6dbe4ebea66afd6b96b05cde83d71bd7"
+    }
+  ]
+}

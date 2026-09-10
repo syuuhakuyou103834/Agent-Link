@@ -1,0 +1,26 @@
+{
+  "product_version": "0.3.6",
+  "product_code_unchanged": true,
+  "zip_sha256": "265547db9139a2d2d972f8c9472480ffabe01f464fd8c8fcb4f3a968354e9c30",
+  "new_authority_tests_passed": 5,
+  "previous_unit_tests_passed": 59,
+  "full_64_rerun_this_turn": false,
+  "endurance_jobs": 110,
+  "endurance_requests": 330,
+  "per_step_ledger_audit": "PASS",
+  "growth": {
+    "private_bytes": {
+      "first_median": 41750528.0,
+      "last_median": 43675648.0,
+      "growth": 0.04611007554203872
+    },
+    "handles": {
+      "first_median": 296.0,
+      "last_median": 296.0,
+      "growth": 0.0
+    }
+  },
+  "files_verified": 15942,
+  "manifest_sha256": "77ca989fd419222bd693a0c8c0024356045a576062fb2914e35c3f7b00de5332",
+  "real_two_pc_acceptance": "NOT_ESTABLISHED"
+}
