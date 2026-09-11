@@ -1,0 +1,18 @@
+AgentLink PyQt5 GUI 0.3.14
+Build on Windows x64 with Python 3.13 and PyQt5 5.15.11 installed:
+  python packaging/build.py
+  python packaging/build.py --zip-only
+Requires the .NET Framework C# compiler included with Windows 10/11.
+No PyInstaller or internet download is used. Artifacts are in dist/.
+
+Validation:
+  python tests/test_context.py
+  python tests/test_storage.py
+  python tests/test_system.py
+  python tests/test_gui.py
+  python tests/test_windows_startup.py
+  python tests/check_real_protocol.py <path-to-codex.exe>
+The last check initializes an isolated Codex profile and starts no model turn.
+
+Offline mock fixtures never contact a model; the GUI runtime itself uses the
+normal Windows user's Codex profile, without moving login files between PCs.
