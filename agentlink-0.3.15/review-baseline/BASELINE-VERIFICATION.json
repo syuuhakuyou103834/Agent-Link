@@ -1,0 +1,18 @@
+{
+  "version": "0.3.15",
+  "source": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.15\\source",
+  "original_review": "C:\\Users\\infin\\AppData\\Local\\AgentLinkGUI\\project-tests\\5b0ac72243894655966f5d9afd6eae95\\20260911-095922-e7134a69945e4faa81b3fb00166fb887\\1",
+  "files_verified": 57,
+  "syntax_checked": 46,
+  "source_and_original_snapshot_and_zip_match_manifest": true,
+  "original_files": {
+    "A-review-handoff.md": "0db61819ce3470b9000b6d4d2327bd279d9243c6bb7a7a2c4bfdd5bdd51538e0",
+    "AgentLink-handoff.md": "b32cc2e39e4ed493be47db296203f9a013bc8bcd3cbc800d11f772cf0b2f2ec7",
+    "source-manifest.json": "d74b645c500d27cce8382e816c7af429ee7d77afcc8c7bec84a6e854c40d9070",
+    "source-snapshot.zip": "4b2502517a452ba71f51184d543e443da7220ea657557ab115662d26acfc3a6a"
+  },
+  "github_push": "BLOCKED_SANDBOX_NETWORK_ALLOWLIST",
+  "repairs": "NOT_STARTED_PENDING_BASELINE_PUSH",
+  "independent_B_evidence": "NOT_AVAILABLE",
+  "real_two_PC_and_model_validation": "NOT_EXECUTED"
+}
