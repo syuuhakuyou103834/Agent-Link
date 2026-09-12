@@ -14,7 +14,7 @@ from app.process_job import ProcessJob
 
 class ProcessJobTests(unittest.TestCase):
     def test_server_code_cannot_run_before_job_assignment(self):
-        folder = ROOT / 'test-output' / ('job-' + uuid.uuid4().hex)
+        folder = __import__('fixture_paths').output_root() / ('job-' + uuid.uuid4().hex)
         folder.mkdir(parents=True)
         marker = folder/'started.txt'
         script = folder/'server.py'
@@ -35,7 +35,7 @@ class ProcessJobTests(unittest.TestCase):
             client.close()
 
     def test_assignment_failure_sends_no_initialize_and_closes_process(self):
-        folder = ROOT / 'test-output' / ('job-' + uuid.uuid4().hex)
+        folder = __import__('fixture_paths').output_root() / ('job-' + uuid.uuid4().hex)
         client = RpcClient([sys.executable, str(ROOT/'tests/mock_server.py'), 'A', str(folder/'calls.jsonl')], folder)
         with patch.object(ProcessJob, 'assign', side_effect=OSError('injected ownership failure')):
             with patch.object(client, 'send', wraps=client.send) as send:
@@ -55,7 +55,7 @@ class ProcessJobTests(unittest.TestCase):
             value = wintypes.DWORD()
             assert api.GetProcessHandleCount(api.GetCurrentProcess(), ctypes.byref(value))
             return value.value
-        folder = ROOT / 'test-output' / ('job-' + uuid.uuid4().hex)
+        folder = __import__('fixture_paths').output_root() / ('job-' + uuid.uuid4().hex)
         client = RpcClient([sys.executable, str(ROOT/'tests/mock_server.py'), 'A', str(folder/'calls.jsonl')], folder)
         client.start(); client.close()
         before = count()

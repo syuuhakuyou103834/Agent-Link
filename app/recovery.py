@@ -17,6 +17,16 @@ def digest(value):
 
 
 class ProjectRecovery:
+    def _has_recovery_child(self, parent):
+        record = self.box.get(parent, 'recovery-child.json')
+        if not record:
+            return False
+        child = record['job_id']
+        meta = self.box.get(child, 'meta.json', {}) or {}
+        root = io_path(self.box.job(child))
+        return not (meta.get('creation_aborted') and meta.get('ready') is False
+                    and not list(io_path(root).glob('*.claim')) and not list(io_path(root).glob('call-*.json')))
+
     def prepare_recovery(self, parent_id, target, text, project):
         if not isinstance(parent_id,str) or not JOB_PATTERN.fullmatch(parent_id):
             raise ValueError('恢复场次编号无效')
@@ -26,7 +36,7 @@ class ProjectRecovery:
         if parent.get('mode') != 'code' or parent.get('project',{}).get('id') != project:
             raise ValueError('仅支持恢复同一项目的失败场次；停止和完成场次不会复活。')
         parent_evidence = recovery_parent(self.box, parent)
-        if self.box.get(parent_id,'recovery-child.json'):
+        if self._has_recovery_child(parent_id):
             raise ValueError('此失败场次已有恢复记录；请在历史中选择最新的恢复场次。')
         peer=read_json(self.box.root/'nodes'/(self.peer_role+'.json'),{})
         if FEATURE not in peer.get('features',[]):
@@ -45,7 +55,7 @@ class ProjectRecovery:
             raise ValueError('缺少未完成步骤的请求记录，不能推测恢复位置。')
         if not isinstance(text,str) or not 1<=len(text.strip())<=12000:
             raise ValueError('请输入明确的恢复指令（1 到 12000 字符）。')
-        inherited=parent.get('recovery',{}).get('prior_attempts',0)+len(list(self.box.job(parent_id).glob('call-*.json')))
+        inherited=parent.get('recovery',{}).get('prior_attempts',0)+len(list(io_path(self.box.job(parent_id)).glob('call-*.json')))
         context = load_context(self.box, parent)
         inputs = []
         for path, value in ordered_inputs(self.box.job(parent_id)):
@@ -89,6 +99,9 @@ class ProjectRecovery:
             imported = dict(value, job_id=job, participant=self.active['participants'][value['target']],
                             inherited_from={'job_id': parent, 'id': value['id'], 'sha256': digest(value)})
             self.box.put(job, 'input-' + value['id'] + '.json', imported)
+        previous = self.box.get(parent, 'recovery-child.json')
+        if previous:
+            self.box.put(parent, 'recovery-child-' + previous['job_id'] + '.json', previous)
         self.box.put(parent,'recovery-child.json',{'job_id':job,'created':now(),'target':plan['target'],'index':plan['index']})
 
     def recovery_scope(self, request, binding):
@@ -100,7 +113,7 @@ class ProjectRecovery:
         scope=read_json(self.data/'runs'/parent/(step+'-scope.json'))
         if not scope and self.active.get('workflow') == 'unified-conversation-v1':
             if (not self.box.get(parent,'call-'+step+'.json')
-                    and not (self.box.job(parent)/(step+'.claim')).exists()):
+                    and not (io_path(self.box.job(parent)/(step+'.claim'))).exists()):
                 return None  # reliable proof that this step never reached a request
         if not scope or scope.get('phase')!=request['phase']:
             raise ValueError('本机缺少原步骤范围记录；不能安全恢复原会话。')

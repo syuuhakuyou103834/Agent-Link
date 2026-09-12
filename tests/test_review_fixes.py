@@ -122,6 +122,9 @@ class InputOrderTests(Fixture):
         prompt = self.node.node_input_prompt('000-A')
         self.assertLess(prompt.index('先要求'), prompt.index('后要求'))
         self.assertNotIn('重复', prompt)
+        self.assertEqual(self.node.node_input_prompt('000-A'), prompt, 'preparing text must not consume queued messages')
+        self.node.client = SimpleNamespace()
+        self.node._commit_node_inputs('000-A', dict(step='000-A', status='send_pending'))
         self.assertEqual(self.node.node_input_prompt('000-A'), '')
 
     def test_04_live_steer_uses_same_order(self):

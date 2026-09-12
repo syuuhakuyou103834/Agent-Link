@@ -15,7 +15,7 @@ from app.storage import atomic_json, read_json
 
 class ProjectTests(unittest.TestCase):
     def setUp(self):
-        self.root = ROOT / 'test-output' / ('project-' + uuid.uuid4().hex)
+        self.root = __import__('fixture_paths').output_root() / ('project-' + uuid.uuid4().hex)
         self.source = self.root / 'source'; self.source.mkdir(parents=True)
         (self.source / 'hello.py').write_text('print("中文")\n', encoding='utf-8')
         (self.source / 'tests').mkdir(); (self.source / 'tests' / 'test_new.py').write_text('# untracked')

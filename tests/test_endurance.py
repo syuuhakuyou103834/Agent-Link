@@ -34,7 +34,7 @@ def resources(handle):
     assert kernel.GetProcessHandleCount(handle, ctypes.byref(handles))
     return {'private_bytes': memory.PrivateUsage, 'handles': handles.value}
 
-root = ROOT / 'test-output' / ('end-' + uuid.uuid4().hex[:8])
+root = __import__('fixture_paths').output_root() / ('end-' + uuid.uuid4().hex[:8])
 root.mkdir(parents=True)
 nodes, errors, samples = {}, [], []
 topic = 'T19固定中文负载' * 20

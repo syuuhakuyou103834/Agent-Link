@@ -33,7 +33,10 @@ def compile_cs(source, output, resource=None):
         '/win32manifest:' + str(ROOT / 'packaging' / 'app.manifest'), '/out:' + str(output)]
     if resource:
         command.append('/resource:' + str(resource) + ',payload.zip')
-    command.append(str(source))
+    generated = TEMP / ('generated-' + Path(source).name)
+    text = Path(source).read_text(encoding='utf-8-sig').replace('AGENTLINK_VERSION', VERSION)
+    generated.write_text(text, encoding='utf-8-sig')
+    command.append(str(generated))
     subprocess.run(command, check=True, env=env, cwd=ROOT, creationflags=subprocess.CREATE_NO_WINDOW)
 
 
@@ -99,6 +102,11 @@ def main():
         copy(ROOT / name, PORTABLE / name)
         copy(ROOT / name, PORTABLE / 'source' / name)
         copy(ROOT / name, DIST / name)
+    # Include the complete documented source baseline, including historical
+    # reports retained for provenance. Never copy build outputs or credentials.
+    for path in ROOT.iterdir():
+        if path.is_file() and (path.suffix in ('.md', '.py', '.txt') or path.name == '.gitignore'):
+            copy(path, PORTABLE / 'source' / path.name)
     license_dir = PORTABLE / 'licenses'; license_dir.mkdir(exist_ok=True)
     copy(PYTHON / 'LICENSE.txt', license_dir / 'Python-3.13-LICENSE.txt')
     copy(QT.parent / 'PyQt5_Qt5-5.15.2.dist-info' / 'LICENSE', license_dir / 'Qt-LICENSE.txt')

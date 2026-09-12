@@ -16,7 +16,7 @@ from app import storage
 
 class StorageTests(unittest.TestCase):
     def setUp(self):
-        self.root = ROOT / 'test-output' / ('storage-' + uuid.uuid4().hex)
+        self.root = __import__('fixture_paths').output_root() / ('storage-' + uuid.uuid4().hex)
         self.root.mkdir(parents=True)
         self.path = self.root / 'heartbeat.json'
         storage.atomic_json(self.path, {'text': '中文 23℃', 'version': 1})

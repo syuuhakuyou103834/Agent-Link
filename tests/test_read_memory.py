@@ -11,7 +11,7 @@ from app.storage import read_json, atomic_json
 
 class ReadMemoryTests(unittest.TestCase):
     def test_small_record_peak_allocation_below_one_mib(self):
-        root = ROOT / 'test-output' / ('mem-' + uuid.uuid4().hex[:8])
+        root = __import__('fixture_paths').output_root() / ('mem-' + uuid.uuid4().hex[:8])
         path = root / 'small.json'
         atomic_json(path, {'text': '中文心跳', 'value': 1})
         tracemalloc.start()
@@ -25,7 +25,7 @@ class ReadMemoryTests(unittest.TestCase):
         self.assertLess(peak, 1024*1024, 'Tiny record allocated a near-8-MiB read buffer')
 
     def test_oversized_record_still_rejected(self):
-        root = ROOT / 'test-output' / ('mem-' + uuid.uuid4().hex[:8])
+        root = __import__('fixture_paths').output_root() / ('mem-' + uuid.uuid4().hex[:8])
         path = root / 'big.json'
         atomic_json(path, {'text': 'x' * 100000})
         with self.assertRaisesRegex(ValueError, '消息过大'):

@@ -1,4 +1,4 @@
-AgentLink PyQt5 GUI 0.3.18
+AgentLink PyQt5 GUI 0.3.20
 Build on Windows x64 with Python 3.13 and PyQt5 5.15.11 installed:
   python packaging/build.py
   python packaging/build.py --zip-only
@@ -6,7 +6,7 @@ Requires the .NET Framework C# compiler included with Windows 10/11.
 No PyInstaller or internet download is used. Artifacts are in dist/.
 
 Validation:
-  python tests/run_release_checks.py
+  python -B tests/run_release_checks.py --out C:\AgentLink-tests\020-run-001
   python tests/check_unified_preflight.py
   python tests/test_context.py
   python tests/test_storage.py

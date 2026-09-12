@@ -9,7 +9,7 @@ using System.Windows.Forms;
 using System.ComponentModel;
 [assembly: AssemblyTitle("AgentLink GUI Setup")]
 [assembly: AssemblyDescription("PyQt5 two-PC collaboration installer")]
-[assembly: AssemblyVersion("0.3.19.0")]
+[assembly: AssemblyVersion("AGENTLINK_VERSION.0")]
 internal static class Package {
     const string ExpectedHash = "PAYLOAD_HASH";
     internal static void Extract(string target) {

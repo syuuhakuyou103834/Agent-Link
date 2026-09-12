@@ -37,7 +37,7 @@ if os.name == 'nt':
 def io_path(path):
     """Extended Windows spelling for I/O only; never changes access rights."""
     value = str(Path(path).absolute())
-    if os.name == 'nt' and len(value) >= 220 and not value.startswith('\\\\?\\'):
+    if os.name == 'nt' and not value.startswith('\\\\?\\'):
         value = ('\\\\?\\UNC\\' + value[2:]) if value.startswith('\\\\') else ('\\\\?\\' + value)
     return Path(value)
 
@@ -241,8 +241,8 @@ def default_data_dir():
 
 def managed_codex_candidates():
     base = Path(os.environ.get("LOCALAPPDATA", "")) / "OpenAI" / "Codex" / "bin"
-    choices = sorted((p for p in base.glob("*/codex.exe") if p.is_file()),
-                     key=lambda p: p.stat().st_mtime, reverse=True) if base.exists() else []
+    choices = sorted((plain_path(p) for p in io_path(base).glob("*/codex.exe") if io_path(p).is_file()),
+                     key=lambda p: io_path(p).stat().st_mtime, reverse=True) if io_path(base).exists() else []
     return base, choices
 
 
@@ -252,7 +252,7 @@ def resolve_codex(configured):
     if configured:
         path = Path(configured)
         legacy = path.resolve() == (base / 'codex.exe').resolve()
-        removed_managed = (not path.exists() and path.name.lower() == 'codex.exe'
+        removed_managed = (not io_path(path).exists() and path.name.lower() == 'codex.exe'
                            and path.parent.parent.resolve() == base.resolve())
         if choices and (legacy or removed_managed):
             return str(choices[0])
@@ -265,7 +265,7 @@ def find_codex():
     base, choices = managed_codex_candidates()
     if choices:
         return str(choices[0])
-    return shutil.which("codex.exe") or (str(base / 'codex.exe') if (base / 'codex.exe').is_file() else "")
+    return shutil.which("codex.exe") or (str(base / 'codex.exe') if (io_path(base / 'codex.exe')).is_file() else "")
 
 
 @dataclass
@@ -331,16 +331,19 @@ class Mailbox:
         io_path(result).mkdir(parents=True, exist_ok=True)
         return result
 
-    def create(self, topic, rounds, initiator="A", context=None, unlimited=False, unified=False):
+    def create(self, topic, rounds, initiator="A", context=None, unlimited=False, unified=False, job_id=None, creation=None):
         if not isinstance(topic, str) or not topic.strip() or len(topic) > 24000:
             raise ValueError("议题应为 1 到 24000 个字符")
         if type(rounds) is not int or not 1 <= rounds <= (99 if unified else 8):
             raise ValueError("评审轮数应为 1 到 8")
-        job_id = new_job_id()
+        job_id = job_id or new_job_id()
         meta = {"protocol": 1, "id": job_id, "topic": topic, "rounds": rounds,
                 "created": now(), "expires": now() + (1 + 2 * rounds) * 1800, "initiator": initiator}
         if unlimited:
             meta.update(protocol=2, expires=None, wait_policy='unlimited')
+        if creation is not None:
+            meta.update(creation=creation, ready=False, workflow='unified-conversation-v1',
+                        conversation=creation['conversation'])
         if context is not None:
             from .context import validate_context, context_hash
             validate_context(context)
@@ -394,7 +397,7 @@ class Mailbox:
 
     def jobs(self):
         path = self.root / "jobs"
-        return sorted((p for p in path.iterdir() if p.is_dir() and JOB_PATTERN.fullmatch(p.name)), reverse=True)[:200]
+        return sorted((p for p in io_path(path).iterdir() if io_path(p).is_dir() and JOB_PATTERN.fullmatch(p.name)), reverse=True)[:200]
 
     def validate_meta(self, meta, job_id):
         if (not isinstance(meta, dict) or type(meta.get("protocol")) is not int
@@ -464,11 +467,11 @@ def report_text(meta, turns, context=None):
 
 def import_legacy(path):
     path = Path(path)
-    if path.is_dir():
+    if io_path(path).is_dir():
         path = path / "discussion.txt"
-    if path.stat().st_size > 2 * 1024 * 1024:
+    if io_path(path).stat().st_size > 2 * 1024 * 1024:
         raise ValueError("旧版记录过大")
-    text = path.read_text(encoding="utf-8-sig")
+    text = io_path(path).read_text(encoding="utf-8-sig")
     keys = ["TOPIC:", "A PROPOSAL:", "B REVIEW:", "A FINAL:", "CODEX LOCAL TASKS:"]
     segments = {}
     for i, key in enumerate(keys):
@@ -482,5 +485,5 @@ def import_legacy(path):
               "summary": "", "tools": [], "thread_id": ""}
              for i, (role, key) in enumerate([("A", keys[1]), ("B", keys[2]), ("A", keys[3])])]
     return {"meta": {"id": "legacy:" + str(path), "topic": segments.get(keys[0], path.parent.name),
-                     "rounds": 1, "created": path.stat().st_mtime},
+                     "rounds": 1, "created": io_path(path).stat().st_mtime},
             "turns": turns, "status": "completed", "legacy_path": str(path), "report": text}

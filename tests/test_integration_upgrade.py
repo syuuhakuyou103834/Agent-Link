@@ -129,7 +129,7 @@ class UpgradeServiceTests(unittest.TestCase):
         atomic_json(self.shared/'nodes/B.json',{'role':'B','features':['agentlink-execution-lease-v3'],
                                              'updated':__import__('time').time(),'status':'idle'})
         self.nodes['A'].command('start',topic='reject old peer',rounds=1)
-        until(lambda: any(k=='error' and '0.3.10' in v['message'] for k,v in self.events['A']))
+        until(lambda: any(k=='error' and '0.3.20' in v['message'] for k,v in self.events['A']))
         self.assertEqual(len(list((self.shared/'jobs').iterdir())),0)
         self.assertEqual(self.calls('A')+self.calls('B'),[])
 

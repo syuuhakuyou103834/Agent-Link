@@ -27,7 +27,7 @@ class MainWindow(W.QMainWindow):
         self.peer={}; self.capabilities={}; self.execution={}; self.storage_warning=False; self.closing=False
         self.conversation=None; self.snapshot={'meta':{},'turns':[],'live':[]}
         self.input_pending=False
-        self.setWindowTitle('AgentLink 0.3.18 · 双机协作')
+        self.setWindowTitle('AgentLink '+__version__+' · 双机协作')
         self.resize(1380,940); self.setMinimumSize(1000,720); self.setStyleSheet(STYLE)
         self.bridge=Bridge();self.bridge.event.connect(self.receive)
         self.service=NodeService(settings,self.data,self.bridge.event.emit,command_override)

@@ -2,7 +2,7 @@
 from pathlib import Path
 import re
 import uuid
-from .storage import atomic_json, read_json, now
+from .storage import atomic_json, read_json, now, plain_path, canonical_path, io_path
 
 FEATURE = 'project-review-v1'
 
@@ -14,17 +14,17 @@ def project_id(value):
 
 
 def local_directory(value):
-    path = Path(value).absolute()
+    path = plain_path(value).absolute()
     if not value or str(path).startswith(('\\\\', '//')) or path == Path(path.anchor):
         raise ValueError('请选择本机的具体项目目录，不能选择整盘或网络路径。')
     for parent in (path, *path.parents):
-        if parent.exists() and (parent.is_symlink() or parent.is_junction()):
+        if io_path(parent).exists() and (io_path(parent).is_symlink() or io_path(parent).is_junction()):
             raise ValueError('项目路径不能经过链接或目录联接：' + str(parent))
-    return path.resolve()
+    return canonical_path(path)
 
 
 def separate(left, right):
-    a, b = Path(left).resolve(), Path(right).resolve()
+    a, b = canonical_path(left), canonical_path(right)
     if a == b or a in b.parents or b in a.parents:
         raise ValueError('项目、共享通信目录及接收/测试目录必须互不包含。')
 
@@ -50,14 +50,14 @@ class Projects:
             raise ValueError('项目名称应为 1 至 120 个字符')
         root = local_directory(directory)
         separate(root, self.data)
-        if role == 'A' and not root.is_dir():
+        if role == 'A' and not io_path(root).is_dir():
             raise ValueError('A 的项目目录必须已存在。')
         if role not in ('A', 'B'):
             raise ValueError('节点角色无效')
         deps = []
         for value in dependencies or []:
             dep = local_directory(value)
-            if not dep.exists():
+            if not io_path(dep).exists():
                 raise ValueError('声明的只读依赖不存在：' + str(dep))
             separate(dep, root)
             deps.append(str(dep))
@@ -77,7 +77,7 @@ class Projects:
         root = local_directory(value['directory'])
         separate(root, shared)
         separate(root, self.data)
-        if role == 'A' and not root.is_dir():
+        if role == 'A' and not io_path(root).is_dir():
             raise ValueError('A 的项目目录已不可用。')
         return value
 
@@ -91,7 +91,7 @@ class Projects:
 def add_issues(shared, identifier, job_id, revision, findings):
     from .storage import _json_guard
     path = Path(shared) / 'projects' / project_id(identifier) / 'issues.json'
-    path.parent.mkdir(parents=True, exist_ok=True)
+    io_path(path.parent).mkdir(parents=True, exist_ok=True)
     with _json_guard(path.with_suffix('.guard')):
         data = read_json(path, {'schema': 1, 'issues': []})
         for finding in findings:

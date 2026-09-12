@@ -2,7 +2,9 @@
 import re
 import time
 import math
-from .storage import read_json, now
+from contextlib import contextmanager
+import hashlib
+from .storage import read_json, now, io_path
 
 FEATURE = 'node-intervention-v1'
 
@@ -18,7 +20,23 @@ def ordered_inputs(directory):
         if type(created) not in (int, float) or not math.isfinite(created):
             created = 0
         return (0, created, path.name)
-    return sorted(((p, read_json(p)) for p in directory.glob('input-*.json')), key=key)
+    # A single durable call receipt commits the complete message set. Message
+    # files remain immutable at dispatch; a crash cannot consume a subset.
+    committed = {}
+    for path in io_path(directory).glob('call-*.json'):
+        call = read_json(path) or {}
+        if call.get('status') == 'not_sent':
+            continue
+        for identifier in call.get('input_ids', []):
+            committed[identifier] = ('delivered' if call.get('status') == 'result_received' else 'uncertain', call.get('step'))
+    values = []
+    for path in io_path(directory).glob('input-*.json'):
+        value = read_json(path)
+        if value.get('id') in committed:
+            state, step = committed[value['id']]
+            value = dict(value, state=state, step=step)
+        values.append((path, value))
+    return sorted(values, key=key)
 
 
 class NodeInput:
@@ -76,6 +94,10 @@ class NodeInput:
                 continue
             with self.box.lifecycle(job):
                 self.box.ensure_open(job)
+                fresh = next((v for p, v in ordered_inputs(self.box.job(job)) if p.name == path.name), None)
+                if not fresh or fresh.get('state') != 'queued':
+                    continue
+                value = fresh
                 value.update(state='send_pending', step=current.step, thread_id=current.thread_id,
                              turn_id=current.turn_id, updated=now())
                 self.box.put(job, path.name, value)
@@ -90,15 +112,72 @@ class NodeInput:
     def node_input_prompt(self, step):
         if not self.active:
             return ''
-        job=self.active['id'];texts=[]
+        job=self.active['id'];texts=[]; candidates={}
         for path, value in ordered_inputs(self.box.job(job)):
             if value.get('target') != self.settings.role or value.get('participant') != self.instance or value.get('job_id') != job:
                 continue
             if value.get('state') == 'queued':
-                value.update(state='included_next_request', step=step, updated=now())
-                self.box.put(job,path.name,value)
+                candidates[value['id']] = hashlib.sha256(value['text'].encode('utf-8')).hexdigest()
                 texts.append(value['text'])
+        if not hasattr(self, '_input_candidates'):
+            self._input_candidates = {}
+        self._input_candidates[(job, step)] = candidates
         return '\n用户仅给本节点的补充：\n'+'\n'.join(texts) if texts else ''
+
+    def _commit_node_inputs(self, step, ledger):
+        job = self.active['id']
+        candidates = getattr(self, '_input_candidates', {}).get((job, step), {})
+        with self.box.lifecycle(job):
+            self.box.ensure_open(job)
+            if self.box.get(job, 'call-' + step + '.json'):
+                raise ValueError('请求已有发送凭据，禁止重复提交')
+            current = {v['id']: v for _, v in ordered_inputs(self.box.job(job))}
+            for key, digest in candidates.items():
+                value = current.get(key, {})
+                if (value.get('state') != 'queued' or value.get('participant') != self.instance
+                        or value.get('target') != self.settings.role or value.get('job_id') != job
+                        or hashlib.sha256(value.get('text','').encode('utf-8')).hexdigest() != digest):
+                    raise ValueError('补充消息已变化或已交付，拒绝发送旧候选请求')
+            ledger.update(input_ids=list(candidates), input_sha256=candidates,
+                          input_commit_schema=1, instance=self.instance)
+            self.box.put(job, 'call-' + step + '.json', ledger)
+        self.client.send_guard = self._request_send_guard
+
+    def _queued_recovery_inputs(self, parent):
+        values = []
+        for path, value in ordered_inputs(self.box.job(parent['id'])):
+            if value.get('state') != 'queued':
+                continue
+            target = value.get('target')
+            if (not re.fullmatch('[a-f0-9]{32}', value.get('id', ''))
+                    or path.name != 'input-' + value['id'] + '.json'
+                    or target not in ('A','B') or value.get('job_id') != parent['id']
+                    or not value.get('participant')
+                    or value['participant'] != parent.get('participants', {}).get(target)
+                    or not isinstance(value.get('text'), str) or not 1 <= len(value['text'].strip()) <= 12000):
+                raise ValueError('恢复定向消息的归属或内容无效')
+            values.append(value)
+        return values
+
+    @contextmanager
+    def _request_send_guard(self):
+        # Serialize only the outbound pipe write with control commits; never
+        # hold the SMB lifecycle lock while waiting for the model response.
+        if not self.active:
+            yield
+            return
+        job = self.active['id']
+        while True:
+            current = getattr(self.client, 'current', None)
+            step = getattr(current, 'step', '')
+            self._wait_unpaused(int(step[:3]) if re.fullmatch(r'\d{3}-[AB]', step) else 0)
+            with self.box.lifecycle(job):
+                self.box.ensure_open(job)
+                if self.box.get(job, 'control.json', {}).get('paused'):
+                    continue
+                self._check_job_instances(self.active)
+                yield
+                return
 
     def _finish_node_inputs(self):
         pending=getattr(self,'_steering',{})

@@ -1,4 +1,5 @@
 """Lossless archive, bounded send view. Never mutate the shared source transcript."""
+from .storage import io_path
 import copy
 import hashlib
 import json
@@ -43,7 +44,7 @@ def prepare(value, base):
     view=project(value)
     bundle_id=digest({'messages':value['messages'],'confirmed':value.get('confirmed')})
     root=Path(base)/bundle_id
-    root.mkdir(parents=True,exist_ok=True)
+    io_path(root).mkdir(parents=True,exist_ok=True)
     entries=[]
     for original,message in zip(value['messages'],view['messages']):
         name='message-'+digest(message)+'.json'

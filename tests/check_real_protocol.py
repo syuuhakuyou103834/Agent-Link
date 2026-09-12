@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT))
 from app.protocol import RpcClient
 from app.storage import find_codex
 
-scratch = ROOT / 'test-output' / 'real-protocol'
+scratch = __import__('fixture_paths').output_root() / 'real-protocol'
 scratch.mkdir(parents=True, exist_ok=True)
 os.environ['CODEX_HOME'] = str(scratch / 'isolated-codex-home')
 Path(os.environ['CODEX_HOME']).mkdir(exist_ok=True)

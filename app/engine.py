@@ -1,5 +1,6 @@
 """Background node service. Qt receives snapshots; SMB and RPC never run on its UI thread."""
 from __future__ import annotations
+from .storage import io_path
 from dataclasses import asdict
 import json
 import math
@@ -26,14 +27,14 @@ from .interruption import (FEATURE as INTERRUPTION_FEATURE, PeerStateError,
 from .storage import (Mailbox, FileLock, Settings, atomic_json, read_json, now,
                       turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES, LONG_TASK_FEATURE)
 
-SAFETY_FEATURE = 'agentlink-execution-lease-v4'
+SAFETY_FEATURE = 'agentlink-execution-lease-v5'
 
 
 class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
     def __init__(self, settings, data_dir, emit, command_override=None):
         self.settings = settings
         self.data = Path(data_dir)
-        self.data.mkdir(parents=True, exist_ok=True)
+        io_path(self.data).mkdir(parents=True, exist_ok=True)
         self.emit = emit
         self.command_override = command_override
         self.commands = queue.Queue()
@@ -116,8 +117,8 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             self._assert_execution_idle()
             # A released process lock does not prove its model subprocess died.
             # Require an explicit terminal fence on every previous job first.
-            for job in (self.box.root / 'jobs').iterdir():
-                if not job.is_dir() or not JOB_PATTERN.fullmatch(job.name):
+            for job in (io_path(self.box.root / 'jobs')).iterdir():
+                if not io_path(job).is_dir() or not JOB_PATTERN.fullmatch(job.name):
                     continue
                 state = read_json(job / 'state.json', {}) or {}
                 if state.get('status') not in TERMINAL_STATES:
@@ -155,7 +156,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                   'type': type(error).__name__, 'message': str(error), 'errno': getattr(error, 'errno', None),
                   'winerror': getattr(error, 'winerror', None), 'traceback': traceback.format_exc()}
         try:
-            folder = self.data / 'logs'; folder.mkdir(parents=True, exist_ok=True)
+            folder = self.data / 'logs'; io_path(folder).mkdir(parents=True, exist_ok=True)
             with (folder / 'agentlink-errors.jsonl').open('a', encoding='utf-8') as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + '\n')
         except OSError:
@@ -184,7 +185,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
         features = peer.get('features') if isinstance(peer, dict) else None
         if not isinstance(features, list) or SAFETY_FEATURE not in features:
-            raise ValueError('对端协议不兼容或尚未连接：需要双方支持无时限执行归属协议（0.3.10 起）。'
+            raise ValueError('对端协议不兼容或尚未连接：创建与消息提交协议需要双方升级至 0.3.20。'
                              '未创建新场次或启动模型，请更新双方并连接。')
         problem = self._peer_problem(peer)
         instance = peer.get('instance')
@@ -197,7 +198,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         if owner.get('instance') != instance or owner.get('role') != self.peer_role:
             raise ValueError('对端能力与当前角色锁归属不一致。')
         lease = self.box.root / 'nodes' / (self.peer_role + '.lease')
-        if not lease.exists():
+        if not io_path(lease).exists():
             raise ValueError('对端角色锁缺失，不能确认当前实例在线。')
         probe = FileLock(lease)
         try:
@@ -254,8 +255,8 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             self.locks.append(FileLock(self.box.root / "nodes" / (self.settings.role + ".lease")).acquire())
             atomic_json(self.box.root / 'nodes' / (self.settings.role + '-owner.json'),
                         {'role':self.settings.role, 'instance':self.instance, 'pid':os.getpid()})
-            Path(self.workspace).mkdir(parents=True, exist_ok=True)
-            if not self.command_override and not Path(self.settings.codex).is_file():
+            io_path(Path(self.workspace)).mkdir(parents=True, exist_ok=True)
+            if not self.command_override and not io_path(Path(self.settings.codex)).is_file():
                 raise RuntimeError("没有找到 codex.exe，请在设置中选择本机可执行文件。")
             command = self.command_override or [self.settings.codex, "app-server", "--listen", "stdio://"]
             self.client = RpcClient(command, self.data / "logs", self.note)
@@ -488,10 +489,10 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             meta = self.box.get(job_id, "meta.json", meta)
         if not meta:
             return
-        cache.mkdir(parents=True, exist_ok=True)
+        io_path(cache).mkdir(parents=True, exist_ok=True)
         root = self.box.job(job_id) if self.connected else cache
         turns = []
-        for path in sorted(root.glob("turn-*.json")):
+        for path in sorted(io_path(root).glob("turn-*.json")):
             value = read_json(path, None)
             if value:
                 turns.append(value)
@@ -506,13 +507,13 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         control = read_json(root / 'control.json', {}) or {}
         report = read_json(root / 'report.json')
         context = load_context(self.box, meta) if self.connected else read_json(cache / 'context.json')
-        if report and not (cache / 'discussion.txt').exists():
-            (cache / 'discussion.txt').write_text(report['text'], encoding='utf-8')
+        if report and not (io_path(cache / 'discussion.txt')).exists():
+            (io_path(cache / 'discussion.txt')).write_text(report['text'], encoding='utf-8')
         if read_json(cache / 'state.json') != state:
             atomic_json(cache / 'state.json', state)
         value = {"meta": meta, "turns": turns, "live": live, "status": state.get("status", "incomplete"),
                  "state": state, "control": control, "context": context,
-                 "request_attempts": meta.get("recovery",{}).get("prior_attempts",0)+len(list(root.glob("call-*.json"))),
+                 "request_attempts": meta.get("recovery",{}).get("prior_attempts",0)+len(list(io_path(root).glob("call-*.json"))),
                  "node_inputs": [v for _, v in ordered_inputs(root)],
                  "report_path": str(cache / "discussion.txt")}
         if meta.get('mode') == 'code':
@@ -529,7 +530,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 issues = read_json(issues_cache)
                 value['project_issues_source'] = 'cache' if issues is not None else 'unavailable'
             value['project_issues'] = (issues or {}).get('issues', [])
-            scopes = sorted(cache.glob('*-scope.json'))
+            scopes = sorted(io_path(cache).glob('*-scope.json'))
             value['local_scope'] = read_json(scopes[-1]) if scopes else None
         fingerprint = json.dumps(value, ensure_ascii=False, sort_keys=True)
         if fingerprint != self.last_snapshot:
@@ -543,9 +544,9 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             roots.append(self.box.root / "jobs")
         for root in roots:
             try:
-                paths = sorted(root.iterdir(), reverse=True)[:150]
+                paths = sorted(io_path(root).iterdir(), reverse=True)[:150]
                 for path in paths:
-                    if not path.is_dir() or not JOB_PATTERN.fullmatch(path.name):
+                    if not io_path(path).is_dir() or not JOB_PATTERN.fullmatch(path.name):
                         continue
                     meta = read_json(path / "meta.json", None)
                     if meta:
@@ -618,7 +619,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             if not self.box.claim(job_id, step):
                 raise RuntimeError("该步骤已有执行记录，未重复调用模型。请检查历史记录。")
         cache = self.box.cache(job_id)
-        (cache / (step + "-input.txt")).write_text(prompt, encoding="utf-8")
+        (io_path(cache / (step + "-input.txt"))).write_text(prompt, encoding="utf-8")
         self.client.start()
         self.client.pump = self._pump
         key = (job_id, role)
@@ -642,8 +643,18 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         # (including thread creation). Do not cross that pause with a request.
         self._wait_unpaused(index)
         self._check_job_instances(self.active)
-        view = self.client.run_turn(self.sessions[key], prompt, role, step, asdict(self.settings),
-                                    lambda value: self._stream(value, index, job_id), self._pump)
+        ledger = dict(job_id=job_id, step=step, role=role, status='send_pending',
+                      thread_id=self.sessions[key], time=now(), prompt_sha256=__import__('hashlib').sha256(prompt.encode('utf-8')).hexdigest())
+        self._commit_node_inputs(step, ledger)
+        try:
+            view = self.client.run_turn(self.sessions[key], prompt, role, step, asdict(self.settings),
+                                        lambda value: self._stream(value, index, job_id), self._pump)
+        except Exception as error:
+            ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent', error=str(error), time=now())
+            self.box.put(job_id, 'call-' + step + '.json', ledger)
+            raise
+        ledger.update(status='result_received', time=now())
+        self.box.put(job_id, 'call-' + step + '.json', ledger)
         self.client.pump = self._pump
         view.update(index=index, updated=now(), host=socket.gethostname(), model=self.settings.model,
                     sandbox=self.settings.sandbox, job_id=job_id)
@@ -746,8 +757,8 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             with self.box.lifecycle(self.active['id']):
                 self.box.ensure_open(self.active['id'])
                 self.box.put(self.active["id"], "report.json", {"text": report})
-                (self.box.cache(self.active["id"]) / "discussion.txt").write_text(report, encoding="utf-8")
-                (self.box.job(self.active["id"]) / "discussion.txt").write_text(report, encoding="utf-8")
+                (io_path(self.box.cache(self.active["id"]) / "discussion.txt")).write_text(report, encoding="utf-8")
+                (io_path(self.box.job(self.active["id"]) / "discussion.txt")).write_text(report, encoding="utf-8")
                 self.box.put(self.active['id'], 'state.json', {
                     'status': 'completed', 'index': None, 'error': '', 'updated': now(),
                     'total': 1 + 2 * rounds})
@@ -782,12 +793,19 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 detail = dict(getattr(error, 'details', {}))
                 if isinstance(error, (TechnicalInterruption, PeerStateError)):
                     index = state.get('index', 0)
-                    step = f'{index:03d}-{self.settings.role}'
-                    call = self.box.get(self.active['id'], 'call-' + step + '.json', {}) or {}
-                    claimed = (self.box.job(self.active['id']) / (step + '.claim')).exists()
-                    detail.update(kind='peer_unavailable', origin=self.settings.role, step=step,
-                        stage=getattr(self, 'execution_stage', None),
-                        request_state=call.get('status', 'claimed_preflight' if claimed else 'not_sent'),
+                    index = index if type(index) is int and index >= 0 else 0
+                    requests = [(role, self.box.get(self.active['id'], f'request-{index:03d}-{role}.json')) for role in ('A','B')]
+                    candidates = [role for role, request in requests if request and request.get('index') == index]
+                    executor = candidates[0] if len(candidates) == 1 else None
+                    if executor is None and not candidates:
+                        calls = [role for role in ('A','B') if self.box.get(self.active['id'], f'call-{index:03d}-{role}.json')]
+                        executor = calls[0] if len(calls) == 1 else None
+                    step = f'{index:03d}-{executor}' if executor else None
+                    call = (self.box.get(self.active['id'], 'call-' + step + '.json', {}) or {}) if step else {}
+                    claimed = bool(step and (io_path(self.box.job(self.active['id']) / (step + '.claim'))).exists())
+                    detail.update(kind='peer_unavailable', origin=self.settings.role, observer=self.settings.role, executor=executor, step=step,
+                        stage=getattr(self, 'execution_stage', None) if executor == self.settings.role else None,
+                        request_state=call.get('status', 'claimed_preflight' if claimed else 'not_sent') if executor else 'UNKNOWN',
                         resume_policy='explicit_only')
                 record = {"message": str(error), "status": status, "time": now()}
                 if detail:record['interruption'] = detail
@@ -849,7 +867,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         if meta.get('mode') == 'code':
             return self._receive_code_step(root, meta)
         job_id = meta['id']
-        for path in sorted(root.glob('request-*-' + self.settings.role + '.json')):
+        for path in sorted(io_path(root).glob('request-*-' + self.settings.role + '.json')):
             request = read_json(path, None, limit=1024 * 1024)
             if (not isinstance(request, dict) or type(request.get('protocol')) is not int
                     or request['protocol'] != meta['protocol'] or request.get('job_id') != job_id):
@@ -860,7 +878,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             step = f"{index:03d}-{self.settings.role}"
             if path.name != 'request-' + step + '.json':
                 raise ValueError('步骤文件名与序号不一致，未启动模型。')
-            if (root / (step + ".claim")).exists():
+            if (io_path(root / (step + ".claim"))).exists():
                 if not self.box.get(job_id, 'turn-' + step + '.json'):
                     raise RuntimeError('结果不确定：场次 ' + job_id + ' 步骤 ' + step +
                                        ' 已领取但无已发布结果；禁止自动重发，请停止该场次并核查本机记录。')
@@ -879,7 +897,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         # Copy the completed report to B too.
         report = self.box.get(job_id, "report.json")
         if report:
-            (self.box.cache(job_id) / "discussion.txt").write_text(report["text"], encoding="utf-8")
+            (io_path(self.box.cache(job_id) / "discussion.txt")).write_text(report["text"], encoding="utf-8")
 
     def run(self):
         self.history()

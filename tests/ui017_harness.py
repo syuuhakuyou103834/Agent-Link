@@ -11,7 +11,7 @@ from app.storage import Settings
 def run(code=False):
     app=W.QApplication.instance() or W.QApplication([])
     for name in ('msyh.ttc','msyhbd.ttc'):QtGui.QFontDatabase.addApplicationFont('C:/Windows/Fonts/'+name)
-    root=ROOT/'test-output'/('ui017-'+uuid.uuid4().hex);root.mkdir(parents=True)
+    root=__import__('fixture_paths').output_root()/('ui017-'+uuid.uuid4().hex);root.mkdir(parents=True)
     windows={}
     def wait(predicate,timeout=50):
         end=time.monotonic()+timeout

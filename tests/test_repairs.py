@@ -52,7 +52,7 @@ class Fixture:
 
 class RepairComponentTests(unittest.TestCase):
     def setUp(self):
-        self.root = ROOT / 'test-output' / ('r-' + uuid.uuid4().hex[:10])
+        self.root = __import__('fixture_paths').output_root() / ('r-' + uuid.uuid4().hex[:10])
         self.root.mkdir(parents=True)
         (self.root / 'case.txt').write_text(self.id(), encoding='utf-8')
         self.box = Mailbox(self.root / 'share', self.root / 'B')

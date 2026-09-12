@@ -9,7 +9,7 @@ import stat
 import uuid
 import zipfile
 from contextlib import contextmanager
-from .storage import atomic_json, read_json, io_path
+from .storage import atomic_json, read_json, io_path, canonical_path, plain_path
 from .projects import local_directory, separate, project_id
 
 MAX_FILES = 100000
@@ -39,9 +39,8 @@ def project_file(path, root):
             if not 0 < length < len(buffer):
                 raise OSError('无法确认已打开项目文件的真实路径')
             text = buffer.value
-            if text.startswith('\\\\?\\'): text = text[4:]
-            final = Path(text)
-        if Path(root).resolve() not in final.parents or final != Path(path).absolute():
+            final = plain_path(text)
+        if canonical_path(root) not in final.parents or final != canonical_path(path):
             raise ValueError('已打开的文件不属于绑定项目，未读取内容')
         yield f
 
@@ -194,35 +193,66 @@ def receive(destination, local, receipt, pump=lambda: None):
         return source, m
     stage = local / ('.partial-' + uuid.uuid4().hex)
     io_path(stage).mkdir()
-    # Read the verified LOCAL archive to eliminate shared-file replacement between hash and extract.
-    archive = stage / 'payload.zip'
-    with io_path(package / 'source.zip').open('rb') as src, io_path(archive).open('xb') as dst:
-        for block in iter(lambda: src.read(1024 * 1024), b''):
-            pump(); dst.write(block)
-    if digest(archive, pump=pump) != receipt['zip_sha256']:
-        raise ValueError('源码包损坏，未启动审查')
-    tree = stage / 'tree'; io_path(tree).mkdir()
-    expected = {e['path'] + ('/' if e['kind'] == 'directory' else ''): e for e in m['entries']}
-    with zipfile.ZipFile(io_path(archive)) as z:
-        infos = z.infolist()
-        if len(infos) != len(expected) or {i.filename for i in infos} != set(expected):
-            raise ValueError('压缩包与清单文件集合不一致')
-        for info in infos:
-            pump()
-            entry = expected[info.filename]
-            if stat.S_ISLNK(info.external_attr >> 16) or info.file_size != entry.get('size', 0):
-                raise ValueError('压缩包文件属性不一致')
-            path = tree / entry['path']
-            if entry['kind'] == 'directory':
-                io_path(path).mkdir(parents=True, exist_ok=True)
-            else:
-                io_path(path.parent).mkdir(parents=True, exist_ok=True)
-                with z.open(info) as src, io_path(path).open('xb') as dst:
-                    for block in iter(lambda: src.read(1024 * 1024), b''):
-                        pump(); dst.write(block)
-    verify(tree, m, pump)
-    os.rename(io_path(tree), io_path(source))
-    return source, m
+    try:
+        # Read the verified LOCAL archive to eliminate shared-file replacement between hash and extract.
+        archive = stage / 'payload.zip'
+        with io_path(package / 'source.zip').open('rb') as src, io_path(archive).open('xb') as dst:
+            for block in iter(lambda: src.read(1024 * 1024), b''):
+                pump(); dst.write(block)
+        if digest(archive, pump=pump) != receipt['zip_sha256']:
+            raise ValueError('源码包损坏，未启动审查')
+        tree = stage / 'tree'; io_path(tree).mkdir()
+        expected = {e['path'] + ('/' if e['kind'] == 'directory' else ''): e for e in m['entries']}
+        with zipfile.ZipFile(io_path(archive)) as z:
+            infos = z.infolist()
+            if len(infos) != len(expected) or {i.filename for i in infos} != set(expected):
+                raise ValueError('压缩包与清单文件集合不一致')
+            for info in infos:
+                pump()
+                entry = expected[info.filename]
+                if stat.S_ISLNK(info.external_attr >> 16) or info.file_size != entry.get('size', 0):
+                    raise ValueError('压缩包文件属性不一致')
+                path = tree / entry['path']
+                if entry['kind'] == 'directory':
+                    io_path(path).mkdir(parents=True, exist_ok=True)
+                else:
+                    io_path(path.parent).mkdir(parents=True, exist_ok=True)
+                    with z.open(info) as src, io_path(path).open('xb') as dst:
+                        for block in iter(lambda: src.read(1024 * 1024), b''):
+                            pump(); dst.write(block)
+        verify(tree, m, pump)
+        os.rename(io_path(tree), io_path(source))
+        # Only this call's newly-created staging directory is owned here. Never
+        # recursively sweep another operation or a published snapshot.
+        try:
+            if canonical_path(stage).parent != canonical_path(local) or io_path(stage).is_junction() or io_path(stage).is_symlink():
+                raise OSError('接收暂存目录边界发生变化')
+            io_path(archive).unlink()
+            io_path(stage).rmdir()
+        except OSError as error:
+            import logging
+            logging.getLogger('agentlink.artifacts').warning('快照已接收；本次临时包清理未完成：%s: %s', stage, error)
+        return source, m
+    except Exception as error:
+        # Failed extraction has no published consumer. Keep a bounded diagnostic
+        # receipt, release this operation's duplicate bytes, retain the original
+        # shared package and all other operations untouched.
+        try:
+            if canonical_path(stage).parent != canonical_path(local) or io_path(stage).is_symlink() or io_path(stage).is_junction():
+                raise OSError('failure staging boundary changed')
+            atomic_json(stage / 'failure.json', dict(snapshot=receipt, error=str(error)[:2048],
+                        retention='metadata retained; owned duplicate payload/tree removed when possible'))
+            tree = stage / 'tree'
+            if io_path(tree).exists():
+                if canonical_path(tree).parent != canonical_path(stage) or io_path(tree).is_symlink() or io_path(tree).is_junction():
+                    raise OSError('failure tree boundary changed')
+                shutil.rmtree(io_path(tree))
+            io_path(stage / 'payload.zip').unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            import logging
+            logging.getLogger('agentlink.artifacts').warning('接收失败；暂存回收待处理：%s: %s', stage, cleanup_error)
+        raise
+
 
 
 def verify(source, manifest, pump=lambda: None):

@@ -10,7 +10,7 @@ from app.ui import MainWindow, SettingsDialog
 from app.storage import Settings
 app = W.QApplication([])
 app.setStyle('Fusion')
-root = ROOT / 'test-output' / 'windows-plugin'
+root = __import__('fixture_paths').output_root() / 'windows-plugin'
 root.mkdir(parents=True, exist_ok=True)
 window = MainWindow(Settings(auto_connect=False), root, start_service=False)
 window.move(-32000, -32000)

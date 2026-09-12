@@ -4,13 +4,13 @@ using System.Diagnostics;
 using System.Windows.Forms;
 using System.Reflection;
 [assembly: AssemblyTitle("AgentLink GUI")]
-[assembly: AssemblyVersion("0.3.19.0")]
+[assembly: AssemblyVersion("AGENTLINK_VERSION.0")]
 internal static class Launcher {
     [STAThread] static void Main(string[] args) {
         try {
             string root = AppDomain.CurrentDomain.BaseDirectory;
             var info = new ProcessStartInfo(Path.Combine(root, "runtime", "pythonw.exe"));
-            info.Arguments = "\"" + Path.Combine(root, "main.py") + "\"";
+            info.Arguments = "-B \"" + Path.Combine(root, "main.py") + "\"";
             // The installer passes only a validated first-run role.
             if (args.Length == 2 && args[0] == "--role" && (args[1] == "A" || args[1] == "B"))
                 info.Arguments += " --role " + args[1];

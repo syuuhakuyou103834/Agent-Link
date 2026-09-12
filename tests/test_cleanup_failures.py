@@ -14,7 +14,7 @@ from app.storage import Settings
 
 class CleanupFailures(unittest.TestCase):
     def exercise(self, failure):
-        folder=ROOT/'test-output'/('cleanup-'+uuid.uuid4().hex)
+        folder=__import__('fixture_paths').output_root()/('cleanup-'+uuid.uuid4().hex)
         client=RpcClient([sys.executable,str(ROOT/'tests/mock_server.py'),'A',str(folder/'calls.jsonl')],folder)
         client.start()
         process=client.process

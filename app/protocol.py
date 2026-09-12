@@ -1,5 +1,6 @@
 """Local stdio App Server adapter; all model authentication stays on this PC."""
 from __future__ import annotations
+from .storage import io_path
 import json
 import os
 from pathlib import Path
@@ -159,7 +160,7 @@ class RpcClient:
         if self.process and self.process.poll() is None:
             return
         self.close()
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        io_path(self.data_dir).mkdir(parents=True, exist_ok=True)
         self.messages = queue.Queue()
         self.responses = {}
         self.log = open(self.data_dir / ("app-server-" + time.strftime("%Y%m%d-%H%M%S") + ".jsonl"), "ab")
@@ -232,7 +233,15 @@ class RpcClient:
         request_id = self.counter
         if method == 'config/read':
             self.sensitive_requests.add(request_id)
-        self.send({"id": request_id, "method": method, "params": params})
+        message = {"id": request_id, "method": method, "params": params}
+        guard = getattr(self, 'send_guard', None) if method == 'turn/start' else None
+        if guard:
+            with guard():
+                self.turn_send_started = True
+                self.send(message)
+        else:
+            if method == 'turn/start': self.turn_send_started = True
+            self.send(message)
         return request_id
 
     def call(self, method, params, timeout=40):
@@ -400,6 +409,7 @@ class RpcClient:
         return request, turn
 
     def run_turn(self, thread_id, prompt, role, step, settings, changed, pump):
+        self.turn_send_started = False
         if self.cleanup_pending:
             raise RuntimeError('执行进程清理未完成，禁止发送新请求。')
         self.last_partial = None

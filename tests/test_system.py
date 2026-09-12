@@ -24,7 +24,7 @@ def until(predicate, seconds=25):
 
 class SystemTests(unittest.TestCase):
     def setUp(self):
-        self.root = ROOT / 'test-output' / uuid.uuid4().hex
+        self.root = __import__('fixture_paths').output_root() / uuid.uuid4().hex
         self.root.mkdir(parents=True)
         (self.root / 'case.txt').write_text(self.id(), encoding='utf-8')
         self.shared = (Path(os.environ['AGENTLINK_TEST_SHARE_ROOT']) / ('e2e-' + self.root.name)

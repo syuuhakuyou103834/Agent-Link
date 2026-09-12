@@ -7,7 +7,7 @@ from PyQt5 import QtWidgets as W
 from app.ui import MainWindow
 from app.storage import Settings, atomic_json
 app=W.QApplication([])
-root=ROOT/'test-output'/('offline-gui-'+uuid.uuid4().hex)
+root=__import__('fixture_paths').output_root()/('offline-gui-'+uuid.uuid4().hex)
 w=MainWindow(Settings(auto_connect=False),root,start_service=False)
 try:
     job='20260911-000000-'+'a'*32

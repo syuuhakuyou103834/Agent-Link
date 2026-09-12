@@ -14,7 +14,7 @@ class ContextUiTests(unittest.TestCase):
         app=W.QApplication.instance() or W.QApplication([])
         for name in ('msyh.ttc','msyhbd.ttc'):
             QtGui.QFontDatabase.addApplicationFont('C:/Windows/Fonts/'+name)
-        root=ROOT/'test-output'/('ui018-'+uuid.uuid4().hex);root.mkdir(parents=True)
+        root=__import__('fixture_paths').output_root()/('ui018-'+uuid.uuid4().hex);root.mkdir(parents=True)
         window=MainWindow(Settings(shared_root=str(root/'share'),auto_connect=False),root,start_service=False)
         try:
             value=window.service.conversations.create('长对话保持原文')

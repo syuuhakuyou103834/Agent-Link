@@ -1,4 +1,5 @@
 """Serial A implementation / B independent review / read-only A closeout."""
+from .storage import io_path
 from dataclasses import asdict
 import hashlib
 import json
@@ -59,8 +60,19 @@ def review_result(answer, receipt, manifest):
     return result
 
 
+def permission_phase(permission, phase):
+    if permission not in (None, 'discuss', 'review', 'edit'):
+        raise ValueError('任务权限无效')
+    if phase not in ('implement', 'review', 'summary'):
+        raise ValueError('任务阶段无效')
+    if permission == 'discuss' or phase == 'summary':
+        return 'summary'
+    return 'review' if permission == 'review' else phase
+
+
 def scoped_settings(base, source, scratch, phase, dependencies):
-    source, scratch = Path(source).resolve(), Path(scratch).resolve()
+    from .storage import canonical_path
+    source, scratch = canonical_path(source), canonical_path(scratch)
     separate(source, scratch)
     rules = {':minimal': 'read', str(source): 'write' if phase == 'implement' else 'read'}
     rules[str(scratch)] = 'read' if phase == 'summary' else 'write'
@@ -152,11 +164,11 @@ class ReviewWorkflow(ProjectRecovery):
                 self.box.ensure_open(self.active['id'])
                 report = report_text(self.active, turns, context)
                 if plan:
-                    attempts=plan['prior_attempts']+len(list(self.box.job(self.active['id']).glob('call-*.json')))
+                    attempts=plan['prior_attempts']+len(list(io_path(self.box.job(self.active['id'])).glob('call-*.json')))
                     report += f'\n\n恢复说明：承接 {plan["index"]} 个已完成步骤；包含原失败尝试的累计请求尝试数：{attempts}。原场次：{plan["parent_id"]}。'
                 self.box.put(self.active['id'], 'report.json', {'text': report, 'outcome': outcome})
-                (self.box.cache(self.active['id']) / 'discussion.txt').write_text(report, encoding='utf-8')
-                (self.box.job(self.active['id']) / 'discussion.txt').write_text(report, encoding='utf-8')
+                (io_path(self.box.cache(self.active['id']) / 'discussion.txt')).write_text(report, encoding='utf-8')
+                (io_path(self.box.job(self.active['id']) / 'discussion.txt')).write_text(report, encoding='utf-8')
                 self.box.put(self.active['id'], 'state.json', dict(status='completed', outcome=outcome,
                     updated=now(), index=None, total=self.active['budget'], calls=len(turns), error=''))
             self.set_status('completed')
@@ -207,12 +219,12 @@ class ReviewWorkflow(ProjectRecovery):
 
     def _receive_code_step(self, root, meta):
         self._code_compatible()
-        for path in sorted(root.glob('request-*-' + self.settings.role + '.json')):
+        for path in sorted(io_path(root).glob('request-*-' + self.settings.role + '.json')):
             request = read_json(path)
             index = request.get('index')
             if type(index) is not int or path.name != f'request-{index:03d}-{self.settings.role}.json':
                 raise ValueError('项目步骤路径无效')
-            if (root / f'{index:03d}-{self.settings.role}.claim').exists():
+            if (io_path(root / f'{index:03d}-{self.settings.role}.claim')).exists():
                 if not self.box.get(meta['id'], f'turn-{index:03d}-{self.settings.role}.json'):
                     raise RuntimeError('结果不确定：项目步骤已领取但未发布；禁止自动重发。')
                 continue
@@ -269,7 +281,7 @@ class ReviewWorkflow(ProjectRecovery):
         restored = self.recovery_scope(r, binding)
         if restored:
             scratch = restored['scratch']
-        scratch.mkdir(parents=True, exist_ok=True)
+        io_path(scratch).mkdir(parents=True, exist_ok=True)
         self.execution_stage = 'receiving_snapshot' if role == 'B' else 'inventory_source'
         if role == 'B':
             source, manifest = artifacts.receive(packages, Path(binding['directory']) / job, receipt, self._pump)
@@ -286,9 +298,8 @@ class ReviewWorkflow(ProjectRecovery):
                 if before != {k: manifest[k] for k in ('entries', 'omitted')} and not (restored and phase=='implement'):
                     raise ValueError('A 项目在交付后发生未评审修改，停止本轮，不能继续或声明通过。')
         read_only_task = self.active.get('task_brief', {}).get('permission') in ('review', 'discuss')
-        permission_phase = ('summary' if self.active.get('task_brief',{}).get('permission') == 'discuss'
-                            else 'review') if phase == 'implement' and read_only_task else phase
-        settings = scoped_settings(asdict(self.settings), source, scratch, permission_phase, binding.get('dependencies', []))
+        access_phase = permission_phase(self.active.get('task_brief',{}).get('permission'), phase)
+        settings = scoped_settings(asdict(self.settings), source, scratch, access_phase, binding.get('dependencies', []))
         if phase == 'review':
             settings['output_schema'] = REVIEW_SCHEMA
         elif phase == 'summary':
@@ -303,6 +314,8 @@ class ReviewWorkflow(ProjectRecovery):
             instructions += '源码及原有测试必须保持只读。新增测试、缓存、日志只能写入测试目录，现有测试用外部输出目录运行。'
         elif phase == 'summary':
             instructions += '这是只读总结，不得修改任何代码、测试、配置，也不得发起新模型任务。'
+        if self.active.get('task_brief', {}).get('permission') == 'discuss':
+            instructions += '本任务仅讨论：所有阶段均只读，不得写测试目录或运行产生副作用的测试。前述测试说明不授予写入权限。'
         self.execution_stage = 'preparing_context'
         prompt = '用户项目任务：\n' + self.active['topic'] + prompt_context(self.active_context)
         prompt += self.unified_formal_context(settings)
@@ -351,13 +364,13 @@ class ReviewWorkflow(ProjectRecovery):
                       status='send_pending', prompt_sha256=hashlib.sha256(prompt.encode('utf-8')).hexdigest(), time=now())
         if context_receipt:
             ledger['context_view'] = context_receipt
-        self.box.put(job, 'call-' + step + '.json', ledger)
+        self._commit_node_inputs(step, ledger)
         self.execution_stage = 'model_running'
         try:
             view = self.client.run_turn(thread, prompt, role, step, settings,
                                        lambda value: self._stream(dict(value, phase=phase), index, job), self._pump)
         except Exception as error:
-            ledger.update(status='interrupted_uncertain', error=str(error), time=now())
+            ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent', error=str(error), time=now())
             self.box.put(job,'call-'+step+'.json',ledger)
             partial=getattr(self.client,'last_partial',None)
             if partial:

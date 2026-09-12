@@ -9,7 +9,7 @@ from app.review_workflow import scoped_settings
 class OverrideTests(unittest.TestCase):
  def run_case(self, config):
   original=copy.deepcopy(config);sent=[]
-  c=RpcClient([],ROOT/'test-output')
+  c=RpcClient([],__import__('fixture_paths').output_root())
   settings=scoped_settings({'model':'mock'},ROOT/'example-source',ROOT/'example-tests','review',[])
   def call(method,params,**kwargs):
    sent.append((method,params))

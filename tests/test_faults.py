@@ -135,7 +135,7 @@ class ComponentFaults(RepairComponentTests):
 
 class ApprovalTests(unittest.TestCase):
     def test_T13_adapter_declines_all_extra_approval_requests(self):
-        client = RpcClient([], ROOT / 'test-output')
+        client = RpcClient([], __import__('fixture_paths').output_root())
         sent = []
         client.send = sent.append
         for i, method in enumerate(('item/commandExecution/requestApproval',
