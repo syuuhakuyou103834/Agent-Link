@@ -1,0 +1,22 @@
+[
+  {
+    "name": "AgentLink-GUI-0.3.16-Windows-x64.zip",
+    "bytes": 24314832,
+    "sha256": "9cfdd815409f12d67d0371416dabc864765908a0e75fc7aaf530c3f4fae482a9"
+  },
+  {
+    "name": "RELEASE-0.3.16.md",
+    "bytes": 2987,
+    "sha256": "5f796ea0d5b92c9b1c541feb7358ea9168da26f6545e261ba98dc8028afad89e"
+  },
+  {
+    "name": "SHA256SUMS-0.3.16.txt",
+    "bytes": 104,
+    "sha256": "2ed7fb8759cf803b818213a0fa42ed4eb43c8d04a866eeaf898e6af9b765ee58"
+  },
+  {
+    "name": "VERIFICATION-0.3.16.json",
+    "bytes": 281,
+    "sha256": "0d210c6061d3f9c87770ce2f0df712b552d336fb5b59de762f8c4573d025444f"
+  }
+]

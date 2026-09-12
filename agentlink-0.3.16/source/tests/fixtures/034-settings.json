@@ -1,0 +1,12 @@
+{
+  "role": "A",
+  "shared_root": "\\\\192.168.1.108\\shared\\AgentLink-GUI-v1",
+  "codex": "mock.exe",
+  "model": "gpt-6-astra",
+  "effort": "high",
+  "workspace": "",
+  "sandbox": "read-only",
+  "tools": "configured",
+  "timeout_seconds": 0,
+  "auto_connect": false
+}
