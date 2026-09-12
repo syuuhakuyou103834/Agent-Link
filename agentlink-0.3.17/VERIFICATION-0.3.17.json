@@ -1,0 +1,86 @@
+{
+  "version": "0.3.17",
+  "created_at": "2026-09-12T03:11:44+08:00",
+  "status": "BUILT_PUBLISHED_LOCAL_CHECKS_PASS",
+  "portable_directory": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.17",
+  "portable_file_count": 188,
+  "source_file_count": 81,
+  "evidence_file_count": 148,
+  "source_manifest_sha256": "061519f6e466c7a42fef8e5a93dfe8a9f8f484ffa4a4ed56b28cffc8ed77d0e0",
+  "exe_version": {
+    "FileVersion": "0.3.17.0",
+    "ProductVersion": "0.3.17.0"
+  },
+  "baseline": {
+    "version": "0.3.16",
+    "frozen_source_matched": 60,
+    "preserved": true
+  },
+  "local_regression": {
+    "distinct_scripts_final_pass": 31,
+    "last_full_pass": 29,
+    "last_full_total": 31,
+    "corrected_script_reruns": 2,
+    "new_integration_tests": 14,
+    "new_guard_tests": 8,
+    "named_class_method_keys": 159,
+    "history_change_gui_reruns": 2
+  },
+  "package_runtime_checks": [
+    {
+      "check": "package-version",
+      "exit_code": 0,
+      "seconds": 0.59
+    },
+    {
+      "check": "package-main-preview",
+      "exit_code": 0,
+      "seconds": 1.16
+    },
+    {
+      "check": "package-native-windows",
+      "exit_code": 0,
+      "seconds": 1.43
+    },
+    {
+      "check": "package-code-gui",
+      "exit_code": 0,
+      "seconds": 10.24
+    },
+    {
+      "check": "package-conversation",
+      "exit_code": 0,
+      "seconds": 95.77
+    }
+  ],
+  "zip_and_directory_hashes": "PASS",
+  "real_model_test_requests": 0,
+  "real_codex_config_profiles_accepted": 3,
+  "real_tool_boundary_tests": "NOT_EXECUTED",
+  "real_SMB": "NOT_EXECUTED",
+  "independent_B": "NOT_EXECUTED",
+  "real_two_PC_model_flow": "NOT_EXECUTED",
+  "production_upgrade": "NOT_EXECUTED",
+  "endurance_100": "NOT_EXECUTED",
+  "installer": "NOT_BUILT",
+  "GitHub_upload": "NOT_PERFORMED",
+  "full_acceptance": false,
+  "artifacts": {
+    "AgentLink-GUI-0.3.17-Windows-x64.zip": {
+      "sha256": "3a92adaaa75a6a3dd217efdeb8b4bb815ab998e00d70b598aa73576fec7e0b94",
+      "bytes": 24385195
+    },
+    "AgentLink-0.3.17-Verification-Evidence.zip": {
+      "sha256": "a91f1088e6bf501ff540c9b5a9d97777cde8f877cd433a9eed1b3b9b1e7e04c7",
+      "bytes": 832375
+    },
+    "RELEASE-0.3.17.md": {
+      "sha256": "9cff936e131001efdf02c96cac3b45e67f96d55c24b078bfc7dd523912397c30",
+      "bytes": 13548
+    },
+    "DEVELOPMENT-LOG-0.3.17.md": {
+      "sha256": "8b0aa495e733c8499b6ed1710f428ac3b025fcf1e0b2da786f5ab670b8635ffa",
+      "bytes": 7765
+    }
+  }
+}
