@@ -1,0 +1,256 @@
+{
+  "version": "0.3.19",
+  "created_at": "2026-09-12T23:33:11+0800",
+  "status": "BUILT_PUBLISHED_LOCAL_CHECKS_PASS",
+  "portable_directory": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.19",
+  "portable_file_count": 201,
+  "source_file_count": 92,
+  "code_manifest_sha256": "c10a394fc8e95b0c60aa1ab63a44ae5302d94e994adb148f1d748d50ef2c72d1",
+  "source_manifest_sha256": "1f33ba714d00c975e8307edc9e926ff18dceab95471b84363e1986ae050cb162",
+  "portable_manifest_sha256": "6e4fdf109456fc1bec727734a6cdc13dc3d031e0a4da05ce85c1e1c66e1bb825",
+  "exe_version": {
+    "preview_exit": 0,
+    "FileVersion": "0.3.19.0",
+    "ProductVersion": "0.3.19.0"
+  },
+  "local_regression": {
+    "distinct_scripts": 37,
+    "final_pass": 37,
+    "named_executions": 185,
+    "distinct_class_method_keys": 185,
+    "new_peer_recovery_cases": 10,
+    "real_model_test_requests": 0,
+    "count_note": "Script checks and method keys are separate. Reruns add no cases."
+  },
+  "package_runtime_checks": [
+    {
+      "test": "test_peer_recovery.py",
+      "started": "2026-09-12T23:22:58+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_peer_recovery.py"
+      ],
+      "pid": 8184,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 35.71,
+      "unittest_counts": [
+        10
+      ]
+    },
+    {
+      "test": "test_repairs.py",
+      "started": "2026-09-12T23:23:33+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_repairs.py"
+      ],
+      "pid": 8700,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 13.89,
+      "unittest_counts": [
+        9
+      ]
+    },
+    {
+      "test": "test_intervention.py",
+      "started": "2026-09-12T23:23:47+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_intervention.py"
+      ],
+      "pid": 14304,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 15.43,
+      "unittest_counts": [
+        5
+      ]
+    },
+    {
+      "test": "test_windows_startup.py",
+      "started": "2026-09-12T23:24:03+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_windows_startup.py"
+      ],
+      "pid": 14852,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 1.68,
+      "unittest_counts": []
+    },
+    {
+      "test": "test_peer_ui.py",
+      "started": "2026-09-12T23:24:04+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_peer_ui.py"
+      ],
+      "pid": 6460,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 0.73,
+      "unittest_counts": [
+        1
+      ]
+    },
+    {
+      "test": "test_code_gui.py",
+      "started": "2026-09-12T23:24:05+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_code_gui.py"
+      ],
+      "pid": 5412,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 7.81,
+      "unittest_counts": []
+    },
+    {
+      "test": "test_conversation.py",
+      "started": "2026-09-12T23:25:59+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_conversation.py"
+      ],
+      "pid": 21704,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 69.26,
+      "unittest_counts": [
+        14
+      ]
+    },
+    {
+      "test": "test_context_view.py",
+      "started": "2026-09-12T23:27:08+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_context_view.py"
+      ],
+      "pid": 20972,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 1.21,
+      "unittest_counts": [
+        6
+      ]
+    },
+    {
+      "test": "test_context_workflow.py",
+      "started": "2026-09-12T23:27:10+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_context_workflow.py"
+      ],
+      "pid": 2364,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 40.49,
+      "unittest_counts": [
+        7
+      ]
+    },
+    {
+      "test": "test_context_ui.py",
+      "started": "2026-09-12T23:27:50+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_context_ui.py"
+      ],
+      "pid": 15332,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 0.76,
+      "unittest_counts": [
+        1
+      ]
+    },
+    {
+      "test": "test_context_resume_guard.py",
+      "started": "2026-09-12T23:27:51+0800",
+      "status": "passed",
+      "command": [
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\runtime\\python.exe",
+        "-B",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\offline_test_guard.py",
+        "C:\\AgentLink-release-0.3.19\\package-final-check\\source\\tests\\test_context_resume_guard.py"
+      ],
+      "pid": 6388,
+      "exit_code": 0,
+      "child_tree_cleanup": "confirmed",
+      "seconds": 0.72,
+      "unittest_counts": [
+        1
+      ]
+    }
+  ],
+  "zip_and_directory_hashes": "PASS",
+  "original_evidence_files": 76,
+  "original_evidence_unchanged": true,
+  "real_model_test_requests": 0,
+  "original_incident": "PASS_COPY_PLAN_ONLY",
+  "real_SMB": "NOT_EXECUTED",
+  "independent_B": "NOT_EXECUTED",
+  "real_two_PC_model_flow": "NOT_EXECUTED",
+  "production_upgrade": "NOT_EXECUTED",
+  "endurance_100": "NOT_EXECUTED",
+  "launcher_interaction": "NOT_EXECUTED",
+  "installer": "NOT_BUILT",
+  "GitHub_upload": "NOT_PERFORMED",
+  "sent_to_B": "NOT_PERFORMED",
+  "full_acceptance": false,
+  "artifacts": {
+    "AgentLink-GUI-0.3.19-Windows-x64.zip": {
+      "sha256": "6a31d9078b0f27314a16f26ed64c99db0ce79c029f9a58f33d8490b69ce6a622",
+      "bytes": 24419329
+    },
+    "AgentLink-0.3.19-Verification-Evidence.zip": {
+      "sha256": "7263c26039e202e43837e2fd0afb01c660e5bfcf30d54f75b1f04ee2b4f5c45d",
+      "bytes": 436885
+    },
+    "RELEASE-0.3.19.md": {
+      "sha256": "53f0c8b5b3cebe3de9f56178c7203ed30610cc05029b90132c46afb86550d5d2",
+      "bytes": 10952
+    },
+    "DEVELOPMENT-LOG-0.3.19.md": {
+      "sha256": "8d564e5dbe7bf7a8cb990a4019c3b7f926f979fe272bdc926ccf8bf617d5bae4",
+      "bytes": 5786
+    }
+  },
+  "published_at": "2026-09-12T23:33:58+0800",
+  "published_directory_hashes": "PASS"
+}

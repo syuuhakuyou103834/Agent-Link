@@ -1,0 +1,32 @@
+[
+  {
+    "name": "AgentLink-GUI-0.3.19-Windows-x64.zip",
+    "bytes": 24419329,
+    "sha256": "6a31d9078b0f27314a16f26ed64c99db0ce79c029f9a58f33d8490b69ce6a622"
+  },
+  {
+    "name": "RELEASE-0.3.19.md",
+    "bytes": 10952,
+    "sha256": "53f0c8b5b3cebe3de9f56178c7203ed30610cc05029b90132c46afb86550d5d2"
+  },
+  {
+    "name": "SHA256SUMS-0.3.19.txt",
+    "bytes": 586,
+    "sha256": "d48db2c1b804bb506b31db04b1b196e7e062e0dcb55fbcbe44da2e3aec568577"
+  },
+  {
+    "name": "VERIFICATION-0.3.19.json",
+    "bytes": 8985,
+    "sha256": "08a82ff5a6523f612317d9eed20dd2f087a52ea931508374e37099b3005edcb2"
+  },
+  {
+    "name": "DEVELOPMENT-LOG-0.3.19.md",
+    "bytes": 5786,
+    "sha256": "8d564e5dbe7bf7a8cb990a4019c3b7f926f979fe272bdc926ccf8bf617d5bae4"
+  },
+  {
+    "name": "AgentLink-0.3.19-Verification-Evidence.zip",
+    "bytes": 436885,
+    "sha256": "7263c26039e202e43837e2fd0afb01c660e5bfcf30d54f75b1f04ee2b4f5c45d"
+  }
+]
