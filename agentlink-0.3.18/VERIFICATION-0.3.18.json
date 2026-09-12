@@ -1,0 +1,109 @@
+{
+  "version": "0.3.18",
+  "created_at": "2026-09-12T18:26:08+08:00",
+  "status": "BUILT_PUBLISHED_LOCAL_CHECKS_PASS",
+  "portable_directory": "C:\\AgentLink-GUI\\dist\\AgentLink-GUI-0.3.18",
+  "portable_file_count": 195,
+  "source_file_count": 87,
+  "evidence_file_count": 94,
+  "source_manifest_sha256": "5f247b206a9de639179bda8e3f9614f97f571fa1d59ed8ed8847c40af3c318f4",
+  "exe_version": {
+    "FileVersion": "0.3.18.0",
+    "ProductVersion": "0.3.18.0"
+  },
+  "local_regression": {
+    "distinct_scripts": 35,
+    "final_pass": 35,
+    "full_run_scripts": 34,
+    "additional_scripts": 1,
+    "named_executions": 174,
+    "distinct_class_method_keys": 174,
+    "new_context_cases": 15,
+    "real_model_test_requests": 0,
+    "count_note": "Script checks, method keys and business coverage are separate; reruns are not new cases"
+  },
+  "package_runtime_checks": [
+    {
+      "check": "package-version",
+      "exit_code": 0,
+      "seconds": 0.64
+    },
+    {
+      "check": "package-main-preview",
+      "exit_code": 0,
+      "seconds": 1.38
+    },
+    {
+      "check": "package-native-windows",
+      "exit_code": 0,
+      "seconds": 1.72
+    },
+    {
+      "check": "package-code-gui",
+      "exit_code": 0,
+      "seconds": 16.68
+    },
+    {
+      "check": "package-conversation",
+      "exit_code": 0,
+      "seconds": 155.32
+    },
+    {
+      "check": "package-context-view",
+      "exit_code": 0,
+      "seconds": 3.17
+    },
+    {
+      "check": "package-context-workflow",
+      "exit_code": 0,
+      "seconds": 85.48
+    },
+    {
+      "check": "package-context-ui",
+      "exit_code": 0,
+      "seconds": 0.94
+    },
+    {
+      "check": "package-context-resume-guard",
+      "exit_code": 0,
+      "seconds": 1.09
+    },
+    {
+      "check": "package-context-ui-final",
+      "exit_code": 0,
+      "seconds": 0.93
+    }
+  ],
+  "original_fixture_unchanged": true,
+  "baseline_source_files_matched": 81,
+  "zip_and_directory_hashes": "PASS",
+  "real_model_test_requests": 0,
+  "real_codex_config_profiles_accepted": 3,
+  "real_tool_boundary_tests": "NOT_EXECUTED",
+  "real_SMB": "NOT_EXECUTED",
+  "independent_B": "NOT_EXECUTED",
+  "real_two_PC_model_flow": "NOT_EXECUTED",
+  "production_upgrade": "NOT_EXECUTED",
+  "endurance_100": "NOT_EXECUTED",
+  "installer": "NOT_BUILT",
+  "GitHub_upload": "NOT_PERFORMED",
+  "full_acceptance": false,
+  "artifacts": {
+    "AgentLink-GUI-0.3.18-Windows-x64.zip": {
+      "sha256": "75f08b6e2b6841bc544ad95ff0282e040bf213a838a7e6cd84ad166ba3347c68",
+      "bytes": 24404016
+    },
+    "AgentLink-0.3.18-Verification-Evidence.zip": {
+      "sha256": "73a5483921ff38de8da1c7033b9c7ab4d58ca6f426ecdb8fb407cee29115302d",
+      "bytes": 963007
+    },
+    "RELEASE-0.3.18.md": {
+      "sha256": "393f06f5a641a749ecd7eeeeebb2f5e3cb8f7e4c1256813ecc8d271076eee511",
+      "bytes": 9442
+    },
+    "DEVELOPMENT-LOG-0.3.18.md": {
+      "sha256": "af9b6c5999219e421586ee6c28413ec63265f5269dc7d1dd78c2665f63fa1f38",
+      "bytes": 6633
+    }
+  }
+}

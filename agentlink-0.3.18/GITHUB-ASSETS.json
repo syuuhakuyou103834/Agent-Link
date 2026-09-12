@@ -1,0 +1,37 @@
+[
+  {
+    "name": "AgentLink-GUI-0.3.18-Windows-x64.zip",
+    "bytes": 24404016,
+    "sha256": "75f08b6e2b6841bc544ad95ff0282e040bf213a838a7e6cd84ad166ba3347c68"
+  },
+  {
+    "name": "RELEASE-0.3.18.md",
+    "bytes": 9442,
+    "sha256": "393f06f5a641a749ecd7eeeeebb2f5e3cb8f7e4c1256813ecc8d271076eee511"
+  },
+  {
+    "name": "SHA256SUMS-0.3.18.txt",
+    "bytes": 484,
+    "sha256": "e49c3c200dbeb04a9c66b104a38e2c532b86cb709df7f89324c1bd8190b2a499"
+  },
+  {
+    "name": "VERIFICATION-0.3.18.json",
+    "bytes": 3098,
+    "sha256": "35b1d48504db4da9ebabf8456a29bae82381808965dc2641605a19ac8eec5123"
+  },
+  {
+    "name": "DEVELOPMENT-LOG-0.3.18.md",
+    "bytes": 6633,
+    "sha256": "af9b6c5999219e421586ee6c28413ec63265f5269dc7d1dd78c2665f63fa1f38"
+  },
+  {
+    "name": "AgentLink-0.3.18-Verification-Evidence.zip",
+    "bytes": 963007,
+    "sha256": "73a5483921ff38de8da1c7033b9c7ab4d58ca6f426ecdb8fb407cee29115302d"
+  },
+  {
+    "name": "ERRATA-0.3.18.md",
+    "bytes": 1833,
+    "sha256": "88a839f4ca19bfb1f0b306a33556bcf45c9c435e65250577744a3e20239eb278"
+  }
+]
