@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "protocol": 2,
+    "id": "20260910-182551-2ffa4d4a94994bf485da30cda176525d",
+    "topic": "0.3.4 真实格式的已完成中文历史",
+    "rounds": 1,
+    "created": 1789064751.5882473,
+    "expires": null,
+    "initiator": "A",
+    "wait_policy": "unlimited"
+  },
+  "control": {
+    "notes": [
+      "LEGACY-NOTE"
+    ]
+  },
+  "turns": [
+    {
+      "role": "A",
+      "index": 0,
+      "step": "000-A",
+      "job_id": "20260910-182551-2ffa4d4a94994bf485da30cda176525d",
+      "status": "completed",
+      "answer": "LEGACY-034-ANSWER-0"
+    },
+    {
+      "role": "B",
+      "index": 1,
+      "step": "001-B",
+      "job_id": "20260910-182551-2ffa4d4a94994bf485da30cda176525d",
+      "status": "completed",
+      "answer": "LEGACY-034-ANSWER-1"
+    },
+    {
+      "role": "A",
+      "index": 2,
+      "step": "002-A",
+      "job_id": "20260910-182551-2ffa4d4a94994bf485da30cda176525d",
+      "status": "completed",
+      "answer": "LEGACY-034-ANSWER-2"
+    }
+  ],
+  "state": {
+    "status": "completed"
+  }
+}

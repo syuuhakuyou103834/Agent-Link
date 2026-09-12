@@ -1,0 +1,6 @@
+{
+  "version": "0.3.4",
+  "source": "C:\\AgentLink-review-20260911\\v034",
+  "storage_sha256": "e87930a878c8f763091a6b6fb6ff49b81a1d627bc269359ecf18d42aabb9178b",
+  "method": "Settings.save(timeout_seconds=900) and Mailbox.create(unlimited=True)"
+}
