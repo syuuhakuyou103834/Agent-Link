@@ -8,3 +8,5 @@ AgentLink 源码、构建说明和测试归档，包含 **0.3.0–0.3.15，共 1
 - [来源和 ZIP SHA-256](agentlink-history/provenance/versions.json)
 
 各版本从对应 Windows 交付 ZIP 提取，保留历史源码，不代表所有版本均已通过完整双机验收。
+
+See [the additional 0.3.16–0.3.19 version archive](GITHUB-SYNC.md) for published source and release records.
