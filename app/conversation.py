@@ -28,14 +28,14 @@ FEATURE = 'unified-conversation-v1'
 ID = re.compile(r'conversation-[a-f0-9]{32}')
 FINISHED = ('completed', 'cancelled', 'needs_user_decision')
 START_WORDS = {'开始', '确认开始', '开始执行', '确认执行', 'start'}
-RESUME_WORDS = {'继续', '恢复', '继续任务', '继续未完成步骤', '额度恢复了', '额度已恢复', 'resume'}
+RESUME_WORDS = {'继续', '恢复', '继续任务', '继续执行', '恢复任务', '继续未完成步骤', '额度恢复了', '额度已恢复', 'resume'}
 
 
 def control_word(text):
     value = re.sub(r'[\s，,。.!！]', '', text).lower()
     if value in {'开始','开始吧','确认开始','开始执行','确认执行','同意开始','可以开始','确认可以开始','同意可以开始','同意按此执行','start'}:
         return '开始'
-    if value in {'继续','恢复','继续任务','恢复任务','继续当前任务','继续之前的任务','继续未完成步骤','额度恢复了','额度已恢复',
+    if value in {'继续','恢复','继续任务','继续执行','恢复任务','继续当前任务','继续之前的任务','继续未完成步骤','额度恢复了','额度已恢复',
                  '额度已恢复请继续','额度已恢复请核查已有结果后继续未完成步骤','resume'}:
         return '继续'
     return text.strip()
@@ -215,6 +215,13 @@ class UnifiedWorkflow:
         return identifier
 
     def unified_control(self, identifier, action):
+        if action == 'resume':
+            value=self.conversations.get(identifier)
+            if (not value or value.get('user_stopped') or value['phase'] not in
+                    ('paused','interrupted','chat_interrupted','context_blocked')):
+                raise ValueError('当前任务不处于可明确恢复的状态')
+            self._assert_execution_idle()
+            return self.unified_submit('继续',identifier)
         with self.conversations.edit(identifier) as value:
             if action == 'cancel':
                 value['phase'] = 'cancelled'
@@ -238,7 +245,8 @@ class UnifiedWorkflow:
 
     def _model_context(self, value, settings=None):
         self.conversations.path(value['id'])  # validate before using the id as a local path
-        text, root, receipt = context_view.prepare(value, self.data / 'context-evidence' / value['id'])
+        prior=read_json(self.data / 'conversations' / value['id'] / ('context-view-' + self.settings.role + '.json'))
+        text, root, receipt = context_view.prepare(value, self.data / 'context-evidence' / value['id'], [prior])
         if settings is not None:
             settings['permission_profile']['filesystem'][str(root.resolve())] = 'read'
         receipt.update(role=self.settings.role, host=socket.gethostname())
@@ -334,10 +342,13 @@ class UnifiedWorkflow:
                     source, _ = artifacts.receive(self.box.job(meta['id']) / 'artifacts',
                         Path(binding['directory']) / meta['id'], receipt, self._pump)
                     rules[str(source.resolve())] = 'read'
+                    original=artifacts.received_package(Path(binding['directory'])/meta['id'],receipt)
+                    rules[str(original.resolve())] = 'read'
         return dict(asdict(self.settings), sandbox='read-only', permissions='agentlink_chat_' + uuid.uuid4().hex,
                     permission_profile={'filesystem': rules, 'network': {'enabled': False}}, output_schema=CHAT_SCHEMA), str(cwd)
 
     def _unified_chat(self, value, msg):
+        self._assert_execution_idle()
         identifier, role = value['id'], self.settings.role
         settings, cwd = self._chat_settings(value, role)
         skill = (io_path(Path(__file__).parent / 'grill_me.md')).read_text(encoding='utf-8')
@@ -362,14 +373,14 @@ class UnifiedWorkflow:
             '\nA 可读取的用户目录：' + json.dumps(user_directories(value['messages']), ensure_ascii=False))
         context_receipt = self._check_context_prompt(value, prompt, '节点 ' + role + ' 用户对话')
         attempt_id = uuid.uuid4().hex
-        lease = FileLock(self.box.root / 'execution.lease').acquire()
+        self.execution_lock = FileLock(self.box.root / 'execution.lease').acquire()
         self.chat_active = identifier
         attempt = dict(id=attempt_id, role=role, message_id=msg['id'], instance=self.instance,
                        host=socket.gethostname(), status='preflight', created=now(), prompt_sha256=fingerprint(prompt),
                        context_view=context_receipt)
-        with self.conversations.edit(identifier) as current:
-            current['attempts'].append(attempt)
         try:
+            with self.conversations.edit(identifier) as current:
+                current['attempts'].append(attempt)
             self.client.start(); self.client.pump = self._unified_pump
             prior = next((a for a in reversed(value['attempts']) if a.get('role') == role
                           and a.get('status') == 'interrupted' and a.get('thread_id') and a.get('host') == socket.gethostname()), None)
@@ -379,6 +390,7 @@ class UnifiedWorkflow:
             self._save_chat_attempt(identifier, attempt)
             result = self.client.run_turn(thread, prompt, role, 'chat-' + attempt_id, settings,
                 lambda v: self._chat_stream(identifier, v), self._unified_pump)
+            self._cache_received_result(identifier,'chat-'+attempt_id,result)
             attempt.update(status='received', result=result, updated=now())
             self._save_chat_attempt(identifier, attempt)
             parsed = json.loads(result['answer'])
@@ -422,7 +434,10 @@ class UnifiedWorkflow:
                         append_message(current, 'A', brief_text(brief) + '\n\n回复“开始”后执行；也可以继续补充或修改。', 'brief')
             attempt['status'] = 'completed'; self._save_chat_attempt(identifier, attempt)
         except Exception as error:
-            attempt.update(status='interrupted' if attempt['status'] == 'send_pending' else 'invalid' if attempt['status'] == 'received' else 'preflight_failed', error=str(error), updated=now())
+            state=attempt['status']
+            attempt.update(status=('interrupted' if getattr(self.client,'turn_send_started',True) else 'preflight_failed')
+                if state=='send_pending' else 'invalid' if state in ('received','completed') else 'preflight_failed',
+                error=str(error), updated=now())
             self._save_chat_attempt(identifier, attempt)
             with self.conversations.edit(identifier) as current:
                 if current['phase'] != 'cancelled':
@@ -430,15 +445,18 @@ class UnifiedWorkflow:
                     current['error'] = str(error)
             self.report_error(error)
         finally:
-            self.client.close(); self.chat_active = None
-            if not getattr(self.client, 'cleanup_pending', False):
-                lease.close()
-            else:
-                self.execution_lock = lease
-            self.client.pump = self._pump
+            try:
+                self._close_execution()
+            finally:
+                # Ownership is already on the service, even when close or a
+                # conversation write raises. A failed close never frees it.
+                self.chat_active = None
+                self.client.pump = self._pump
             self.sync_conversation(identifier)
 
     def _save_chat_attempt(self, identifier, attempt):
+        self._trace('chat_attempt',conversation_id=identifier,request_state=attempt['status'],
+                    thread_id=attempt.get('thread_id'))
         with self.conversations.edit(identifier) as current:
             current['attempts'] = [dict(attempt) if a['id'] == attempt['id'] else a for a in current['attempts']]
 
@@ -815,6 +833,7 @@ class UnifiedWorkflow:
         return '\n已确认任务说明：\n' + brief_text(self.active['task_brief']) + '\n对话正文与证据索引（来源已标记；外置正文需读取后再判断）：\n' + self._model_context(value, settings)
 
     def _unified_text_step(self, request):
+        self._assert_execution_idle()
         role = self.settings.role; meta = self.active; job = meta['id']; phase = request['phase']
         step = f"{request['index']:03d}-{role}"
         lease = FileLock(self.box.root / 'execution.lease').acquire(); self.execution_lock = lease
@@ -862,6 +881,7 @@ class UnifiedWorkflow:
             except Exception as error:
                 ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent',error=str(error));self.box.put(job,'call-'+step+'.json',ledger)
                 raise
+            self._cache_received_result(job,step,result)
             ledger['status']='result_received'; self.box.put(job,'call-'+step+'.json',ledger)
             result.update(job_id=job,index=request['index'],phase=phase,revision=request['revision'],updated=now())
             if phase == 'review':
@@ -884,7 +904,7 @@ class UnifiedWorkflow:
                 self.box.ensure_open(job); self.box.put(job,'turn-'+step+'.json',result)
             return result
         finally:
-            self.client.close(); self._release_execution()
+            self._close_execution()
 
     @staticmethod
     def _readable_turn(turn):

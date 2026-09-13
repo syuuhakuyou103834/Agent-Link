@@ -4,6 +4,8 @@ import sys
 import threading
 import time
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from fixture_paths import fs
 import uuid
 import re
 
@@ -12,7 +14,7 @@ delay = float(sys.argv[3]) if len(sys.argv) > 3 else .07
 lock = threading.Lock()
 turns = {}
 memory_path = Path(audit_path + '.threads.json')
-threads = json.loads(memory_path.read_text(encoding='utf-8')) if memory_path.exists() else {}
+threads = json.loads(fs(memory_path).read_text(encoding='utf-8')) if fs(memory_path).exists() else {}
 
 
 def send(value):
@@ -50,22 +52,22 @@ def work(tid, turn_id, prompt, cancel):
         action='conflict' if '[CONFLICT]' in latest else 'relay' if role=='B' and '[RELAY]' in latest else 'continue' if record.get('confirmed') and record['phase']=='working' else 'advice' if role=='B' else 'clarify'
         text=json.dumps(dict(message='模拟澄清或补充：'+latest,ready='[MORE]' not in latest,brief=brief,action=action),ensure_ascii=False)
         marker=Path(audit_path+'.chatquota')
-        if '[CHAT_QUOTA]' in prompt and not marker.exists():
-            marker.write_text('once')
+        if '[CHAT_QUOTA]' in prompt and not fs(marker).exists():
+            fs(marker).write_text('once')
             notify('turn/completed',tid,turn_id,turn={'id':turn_id,'status':'failed','items':[],'error':{'message':'usage limit reached'}})
             return
     elif prompt.startswith('[AGENTLINK_FORMAL_TEXT]'):
         phase=prompt.split('阶段：',1)[1].split('\n',1)[0]
         decision='changes_requested' if '[NEEDS_CHANGES]' in prompt else 'passed'
         if '[TWO_ROUNDS]' in prompt:
-            seen=sum('[AGENTLINK_FORMAL_TEXT]\n阶段：review' in json.loads(line)['prompt'] for line in Path(audit_path).read_text(encoding='utf-8').splitlines())
+            seen=sum('[AGENTLINK_FORMAL_TEXT]\n阶段：review' in json.loads(line)['prompt'] for line in fs(Path(audit_path)).read_text(encoding='utf-8').splitlines())
             decision='changes_requested' if seen==1 else 'passed'
         if phase=='review':text=json.dumps(dict(snapshot='',decision=decision,summary='模拟独立核查',scope=['回答'],tests=['mock comparison'],unverified=[],unrelated_issues=[]),ensure_ascii=False)
         elif phase=='summary':text=json.dumps(dict(snapshot='',decision='disputed' if '[NEEDS_CHANGES]' in prompt else 'agreed',summary='模拟最终总结'),ensure_ascii=False)
     if '\n本轮范围：\n' in prompt:
         scope, _ = json.JSONDecoder().raw_decode(prompt.split('\n本轮范围：\n', 1)[1])
         if scope['phase'] == 'review':
-            manifest = json.loads((Path(scope['scratch']) / 'manifest.json').read_text(encoding='utf-8'))
+            manifest = json.loads((fs(Path(scope['scratch']) / 'manifest.json')).read_text(encoding='utf-8'))
             decision = 'blocked' if '[BLOCK_REVIEW]' in prompt else 'changes_requested' if '[NEEDS_CHANGES]' in prompt else 'passed'
             text = json.dumps(dict(snapshot=scope['snapshot']['manifest_sha256'], decision=decision,
                 summary='本机模拟审查结论', scope=list(set(manifest['changed']) | {e['path'] for e in manifest['entries'] if e['kind']=='file'}),
@@ -73,10 +75,10 @@ def work(tid, turn_id, prompt, cancel):
                 unrelated_issues=['另一个范围外问题'] if '[SIDE_ISSUE]' in prompt else []), ensure_ascii=False)
         elif scope['phase'] == 'summary':
             if '[MUTATE_SUMMARY]' in prompt:
-                (Path(scope['source']) / 'late.txt').write_text('unreviewed mutation', encoding='utf-8')
+                (fs(Path(scope['source']) / 'late.txt')).write_text('unreviewed mutation', encoding='utf-8')
             decision = 'blocked' if '[BLOCK_REVIEW]' in prompt else 'disputed' if '[NEEDS_CHANGES]' in prompt or '[A_DISAGREES]' in prompt else 'agreed'
             text = json.dumps(dict(snapshot=scope['snapshot']['manifest_sha256'], decision=decision, summary=text), ensure_ascii=False)
-    if role == 'B' and '[QUOTA_B_ONCE]' in prompt and len(Path(audit_path).read_text(encoding='utf-8').splitlines()) == 1:
+    if role == 'B' and '[QUOTA_B_ONCE]' in prompt and len(fs(Path(audit_path)).read_text(encoding='utf-8').splitlines()) == 1:
         notify('item/agentMessage/delta', tid, turn_id, itemId='answer', delta='B 已完成部分独立检查，等待恢复。')
         time.sleep(.2)
         notify('turn/completed', tid, turn_id, turn={'id':turn_id,'status':'failed','items':[], 'error':{'message':'usage limit reached: quota exhausted'}})
@@ -103,7 +105,7 @@ for raw in sys.stdin.buffer:
     if 'id' not in request:
         continue
     method, p = request.get('method'), request.get('params', {})
-    with open(audit_path + '.rpc.jsonl','a',encoding='utf-8') as f:
+    with fs(audit_path + '.rpc.jsonl').open('a',encoding='utf-8') as f:
         f.write(json.dumps({'method':method,'params':p},ensure_ascii=False)+'\n')
     result = {}
     start = None
@@ -125,13 +127,13 @@ for raw in sys.stdin.buffer:
                 send({'id':request['id'],'error':{'code':-32000,'message':'original thread missing'}});continue
             result['thread']['id'] = p['threadId']
         threads[result['thread']['id']] = p
-        memory_path.write_text(json.dumps(threads,ensure_ascii=False),encoding='utf-8')
+        fs(memory_path).write_text(json.dumps(threads,ensure_ascii=False),encoding='utf-8')
     elif method == 'turn/start':
         turn_id = uuid.uuid4().hex
         prompt = p['input'][0]['text']
         # Count at receipt, before reply, worker launch, authentication errors or crash.
         with lock:
-            with open(audit_path, 'a', encoding='utf-8') as f:
+            with fs(audit_path).open('a', encoding='utf-8') as f:
                 f.write(json.dumps({'role': role, 'thread': p['threadId'], 'turn': turn_id,
                     'prompt': prompt, 'request_id': request['id'], 'method': method,
                     'thread_params': threads.get(p['threadId'], {}), 'output_schema': p.get('outputSchema')}, ensure_ascii=False) + '\n')

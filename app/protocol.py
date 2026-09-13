@@ -153,6 +153,11 @@ class RpcClient:
         self.turn_started_at = None
         self.last_turn_event_at = None
         self.turn_event_count = 0
+        self.trace = lambda event, **fields: None
+
+    def _trace(self, event, **fields):
+        try:self.trace(event,**fields)
+        except Exception:pass
 
     def start(self):
         if self.cleanup_pending:
@@ -163,7 +168,7 @@ class RpcClient:
         io_path(self.data_dir).mkdir(parents=True, exist_ok=True)
         self.messages = queue.Queue()
         self.responses = {}
-        self.log = open(self.data_dir / ("app-server-" + time.strftime("%Y%m%d-%H%M%S") + ".jsonl"), "ab")
+        self.log = io_path(self.data_dir / ("app-server-" + time.strftime("%Y%m%d-%H%M%S") + ".jsonl")).open("ab")
         try:
             if os.name == 'nt':
                 from .process_job import ProcessJob, ensure_host_guard
@@ -179,6 +184,7 @@ class RpcClient:
                 # is established. Assignment failure must never fall back to RPC.
                 self.process_job.assign(self.process)
                 self.process_job.resume(self.process)
+            self._trace('server_started',server_pid=self.process.pid)
         except Exception:
             self.close()
             raise
@@ -198,7 +204,7 @@ class RpcClient:
                     break
                 if stderr:
                     # Diagnostic stderr stays local; do not mirror server credentials or URLs to peers.
-                    with open(self.data_dir / "app-server-stderr.log", "ab") as out:
+                    with io_path(self.data_dir / "app-server-stderr.log").open("ab") as out:
                         out.write(raw)
                     continue
                 try:
@@ -240,7 +246,13 @@ class RpcClient:
         def send():
             if method == 'turn/start': self.turn_send_started = True
             if method == 'turn/steer': self.steer_send_started = True
-            self.send(message)
+            tracked=method in ('turn/start','turn/steer','turn/interrupt')
+            if tracked:self._trace('request_sending',method=method,request_id=request_id,request_state='send_pending')
+            try:self.send(message)
+            except Exception:
+                if tracked:self._trace('request_write_failed',method=method,request_id=request_id,request_state='uncertain')
+                raise
+            if tracked:self._trace('request_written',method=method,request_id=request_id,request_state='pipe_written')
         if guard:
             with guard(): send()
         else:
@@ -455,6 +467,8 @@ class RpcClient:
                 raise RuntimeError(result["error"] or "Codex 执行失败。")
             if not result["answer"].strip():
                 raise RuntimeError("本次调用没有返回回答，事件记录已保留。")
+            self._trace('result_received',thread_id=thread_id,turn_id=self.current.turn_id,step=step,
+                request_state='result_received',elapsed_seconds=time.monotonic()-self.turn_started_at)
             return result
         except Cancelled:
             # Includes cancellation while turn/start itself was waiting.

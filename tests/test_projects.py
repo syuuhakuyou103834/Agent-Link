@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from fixture_paths import fs
 import sys
 import unittest
 import uuid
@@ -16,36 +17,36 @@ from app.storage import atomic_json, read_json
 class ProjectTests(unittest.TestCase):
     def setUp(self):
         self.root = __import__('fixture_paths').output_root() / ('project-' + uuid.uuid4().hex)
-        self.source = self.root / 'source'; self.source.mkdir(parents=True)
-        (self.source / 'hello.py').write_text('print("中文")\n', encoding='utf-8')
-        (self.source / 'tests').mkdir(); (self.source / 'tests' / 'test_new.py').write_text('# untracked')
-        (self.source / 'empty').mkdir()
+        self.source = self.root / 'source'; fs(self.source).mkdir(parents=True)
+        (fs(self.source / 'hello.py')).write_text('print("中文")\n', encoding='utf-8')
+        (fs(self.source / 'tests')).mkdir(); (fs(self.source / 'tests' / 'test_new.py')).write_text('# untracked')
+        (fs(self.source / 'empty')).mkdir()
         self.pid = uuid.uuid4().hex
 
     def package(self):
         return artifacts.publish(self.source, self.root / 'shared', self.pid, 'job', 1)
 
     def test_full_snapshot_includes_untracked_and_explicit_omissions(self):
-        (self.source / '.env').write_text('not-to-be-read')
-        (self.source / 'node_modules').mkdir()
+        (fs(self.source / '.env')).write_text('not-to-be-read')
+        (fs(self.source / 'node_modules')).mkdir()
         r, m = self.package()
         received, copied = artifacts.receive(self.root / 'shared', self.root / 'mirror', r)
         self.assertEqual(m, copied)
-        self.assertTrue((received / 'tests' / 'test_new.py').exists())
-        self.assertTrue((received / 'empty').is_dir())
-        self.assertFalse((received / '.env').exists())
+        self.assertTrue((fs(received / 'tests' / 'test_new.py')).exists())
+        self.assertTrue((fs(received / 'empty')).is_dir())
+        self.assertFalse((fs(received / '.env')).exists())
         self.assertEqual({v['path'] for v in m['omitted']}, {'.env', 'node_modules'})
         self.assertEqual(artifacts.receive(self.root / 'shared', self.root / 'mirror', r)[0], received)
 
     def test_corrupt_zip_blocks_before_extract(self):
         r, m = self.package()
-        (self.root / 'shared' / r['manifest_sha256'] / 'source.zip').write_bytes(b'corrupt')
+        (fs(self.root / 'shared' / r['manifest_sha256'] / 'source.zip')).write_bytes(b'corrupt')
         with self.assertRaisesRegex(ValueError, '损坏'):
             artifacts.receive(self.root / 'shared', self.root / 'mirror', r)
 
     def test_late_modification_invalidates_snapshot(self):
         r, m = self.package(); received, _ = artifacts.receive(self.root / 'shared', self.root / 'mirror', r)
-        (received / 'hello.py').write_text('modified')
+        (fs(received / 'hello.py')).write_text('modified')
         with self.assertRaises(ValueError): artifacts.verify(received, m)
 
     def test_names_reject_escape_ads_and_windows_aliases(self):
@@ -54,7 +55,7 @@ class ProjectTests(unittest.TestCase):
 
     def test_hardlink_rejected(self):
         import os
-        os.link(self.source / 'hello.py', self.source / 'alias.py')
+        os.link(fs(self.source / 'hello.py'), fs(self.source / 'alias.py'))
         with self.assertRaisesRegex(ValueError, '硬链接'): self.package()
 
     def test_nested_bindings_and_shared_root_rejected(self):
@@ -103,7 +104,7 @@ class ProjectTests(unittest.TestCase):
 
     def test_ready_missing_and_wrong_job_rejected(self):
         r, m = self.package()
-        (self.root/'shared'/r['manifest_sha256']/'ready.json').unlink()
+        (fs(self.root/'shared'/r['manifest_sha256']/'ready.json')).unlink()
         with self.assertRaises(ValueError): artifacts.receive(self.root/'shared', self.root/'mirror', r)
         with self.assertRaises(ValueError): artifacts.validate_manifest(m, dict(r, job_id='other'))
 

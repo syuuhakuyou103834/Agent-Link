@@ -28,8 +28,9 @@ from .storage import (Mailbox, FileLock, Settings, atomic_json, read_json, now,
                       turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES, LONG_TASK_FEATURE)
 
 from .liveness import PeerLiveness, FEATURE as LIVENESS_FEATURE, valid_challenge
+from .diagnostics import RuntimeJournal
 
-SAFETY_FEATURE = 'agentlink-execution-lease-v6'
+SAFETY_FEATURE = 'agentlink-execution-lease-v7'
 
 
 class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
@@ -49,6 +50,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.box = None
         self.locks = []
         self.execution_lock = None
+        self.cleanup_error = ''
         self.instance = uuid.uuid4().hex
         self.active = None
         self.selected = None
@@ -62,6 +64,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.last_ui = 0.
         self.last_snapshot = None
         self.share_lost = None
+        self.io_failures = {}
         self.storage_warning = False
         self.last_error_key = None
         self.last_error_at = 0.
@@ -69,8 +72,11 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.heartbeat_seq = 0
         self.peer_record = {}
         self.thread = threading.Thread(target=self.run, name="AgentLink-node", daemon=True)
+        self.diagnostics = RuntimeJournal(self.data / 'logs')
+        self.last_diagnostic = 0.
 
     def start(self):
+        self.diagnostics.start()
         self.thread.start()
         if self.settings.auto_connect:
             self.command("connect")
@@ -172,9 +178,27 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.emit(kind, {'message': message})
 
     def set_status(self, status, text=""):
+        previous = self.status
         self.status = status
+        self._trace('status_changed', previous_status=previous)
         self.emit("status", {"status": status, "text": text, "role": self.settings.role,
                              "connected": self.connected, "active": self.active["id"] if self.active else None})
+
+    def _trace(self, event, **fields):
+        """Only bounded metadata crosses into the diagnostics writer thread."""
+        try:
+            common=dict(role=self.settings.role,instance=self.instance,host_pid=os.getpid(),
+                server_pid=getattr(getattr(self.client,'process',None),'pid',None),
+                job_id=(self.active or {}).get('id'),
+                conversation_id=getattr(self,'chat_active',None) or (self.active or {}).get('conversation'),
+                status=self.status,heartbeat_seq=self.heartbeat_seq,
+                execution_locked=self.execution_lock is not None,
+                cleanup_pending=bool(self.cleanup_error or getattr(self.client,'cleanup_pending',False)))
+            common.update(fields)
+            self.diagnostics.emit(event,**common)
+        except Exception:
+            # Diagnostics must never alter request admission or cleanup.
+            pass
 
     @property
     def peer_role(self):
@@ -189,7 +213,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
         features = peer.get('features') if isinstance(peer, dict) else None
         if not isinstance(features, list) or SAFETY_FEATURE not in features or LIVENESS_FEATURE not in features:
-            raise ValueError('对端协议不兼容或尚未连接：创建与消息提交协议需要双方升级至 0.3.21。'
+            raise ValueError('对端协议不兼容或尚未连接：执行清理与消息提交协议需要双方升级至 0.3.22。'
                              '未创建新场次或启动模型，请更新双方并连接。')
         instance = peer.get('instance')
         if expected_instance is not None and instance != expected_instance:
@@ -246,7 +270,9 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         return self._check_peer_compatibility(expected_instance=expected, allow_wait=allow_wait)
 
     def connect(self):
+        self._reconcile_cleanup()
         self.liveness = PeerLiveness(self.settings.role, self.instance)
+        self.io_failures.clear();self.share_lost=None
         self.last_tick = 0.
         self.set_status("connecting", "正在连接共享目录与本机 Codex…")
         self.box = Mailbox(self.settings.shared_root, self.data)
@@ -261,6 +287,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 raise RuntimeError("没有找到 codex.exe，请在设置中选择本机可执行文件。")
             command = self.command_override or [self.settings.codex, "app-server", "--listen", "stdio://"]
             self.client = RpcClient(command, self.data / "logs", self.note)
+            self.client.trace = self._trace
             self.client.pump = self._pump
             self.client.start()
             Projects(self.data).publish(self.box.root, self.settings.role)
@@ -276,7 +303,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
 
     def disconnect(self):
         if self.client:
-            self.client.close()
+            self._close_execution()
             self.client = None
         self._release_execution()
         if self.connected and self.box:
@@ -294,7 +321,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.set_status("offline", "节点已离线")
 
     def _assert_execution_idle(self):
-        if self.execution_lock or getattr(self.client, 'cleanup_pending', False):
+        if self.execution_lock or self.cleanup_error or getattr(self.client, 'cleanup_pending', False):
             raise RuntimeError('执行进程清理尚未确认完成，新场次未创建。')
         try:
             probe = FileLock(self.box.root / 'execution.lease').acquire()
@@ -310,6 +337,77 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         if self.execution_lock:
             self.execution_lock.close()
             self.execution_lock = None
+
+    def _close_execution(self):
+        """Only a confirmed close may relinquish a retained execution lease."""
+        try:
+            self.client.close()
+            if getattr(self.client, 'cleanup_pending', False):
+                raise RuntimeError('执行进程清理尚未确认，保留执行归属。')
+        except Exception as error:
+            self.cleanup_error = str(error)
+            self._trace('cleanup_failed',reason_code='execution_cleanup_unconfirmed')
+            try:
+                from .process_job import process_creation, _host_guard
+                pid=getattr(getattr(self.client,'process',None),'pid',None)
+                atomic_json(self.data / 'execution-cleanup.json', dict(
+                    status='cleanup_pending', instance=self.instance, role=self.settings.role,
+                    pid=pid,process_created=process_creation(pid) if pid else None,
+                    host_pid=os.getpid(),host_created=process_creation(os.getpid()),host_guard=_host_guard is not None,
+                    job_id=(self.active or {}).get('id'),
+                    conversation=getattr(self, 'chat_active', None), error=str(error), time=now()))
+            except Exception as recording_error:
+                error.add_note('清理记录写入失败：' + str(recording_error))
+            self.set_status('cleanup_pending', '执行进程清理未确认；请重试断开以清理，已完成结果保留。')
+            raise
+        self._release_execution()
+        self.cleanup_error = ''
+        self._trace('cleanup_confirmed')
+        path = self.data / 'execution-cleanup.json'
+        if io_path(path).exists():
+            old = read_json(path, {}) or {}
+            atomic_json(path, dict(old, status='cleanup_confirmed', confirmed_at=now()))
+
+    def _reconcile_cleanup(self):
+        """A restart never clears a pending cleanup just because a root PID changed."""
+        path=self.data/'execution-cleanup.json'
+        record=read_json(path)
+        if record is None and not io_path(path).exists():return
+        if not isinstance(record,dict) or record.get('status') not in ('cleanup_pending','cleanup_confirmed'):
+            raise RuntimeError('执行清理记录损坏，禁止按清理成功处理。')
+        if record.get('status')!='cleanup_pending':return
+        from .process_job import process_creation
+        if (not record.get('host_guard') or type(record.get('host_pid')) is not int
+                or type(record.get('host_created')) is not int):
+            raise RuntimeError('旧执行清理记录缺少进程归属证明，请保留日志核查；禁止新请求。')
+        if process_creation(record['host_pid'])==record['host_created']:
+            raise RuntimeError('旧执行宿主仍存活，清理未确认；请在原窗口重试断开。')
+        pid=record.get('pid')
+        if pid and record.get('process_created') is not None and process_creation(pid)==record['process_created']:
+            raise RuntimeError('旧执行进程仍存活，清理未确认；禁止新请求。')
+        # The original host was enrolled before child creation in a non-breakaway
+        # KILL_ON_JOB_CLOSE guard. Verify host identity AND child identity before
+        # recording OS cleanup. No termination by a possibly reused PID occurs.
+        atomic_json(path,dict(record,status='cleanup_confirmed',confirmed_at=now(),
+                              recovery_basis='original guarded host exited; original child absent'))
+        self._trace('cleanup_reconciled',reason_code='guarded_host_exited')
+
+    def _cache_received_result(self, job, step, result):
+        """Preserve the returned payload before cleanup or shared publication."""
+        from .context_view import digest
+        path=self.data/'received-results'/job/step/'result.json'
+        record=dict(schema=1,job_id=job,step=step,role=self.settings.role,instance=self.instance,
+            host=socket.gethostname(),received_at=now(),result=result,sha256=digest(result),
+            verification='raw result received; not a validated/published turn')
+        existing=read_json(path)
+        if existing is None and io_path(path).exists():
+            raise ValueError('已有本机返回缓存损坏，拒绝覆盖')
+        if existing is not None:
+            if not isinstance(existing,dict) or existing.get('sha256')!=record['sha256'] or existing.get('result')!=result:
+                raise ValueError('同一步骤已有不同的本机返回结果，拒绝覆盖')
+        else:atomic_json(path,record)
+        self._trace('result_cached',step=step,request_state='result_received')
+        return path
 
     def _heartbeat(self, force=False):
         if not self.box or (not self.connected and not force):
@@ -353,9 +451,10 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         while self.active:
             try:
                 self._check_job_instances(self.active)
+                self._io_recovered('peer_check')
                 return
             except OSError as error:
-                self._peer_io_error(error)
+                self._peer_io_error(error, 'peer_check')
             except PeerStateError as error:
                 if error.details.get('code') not in ('peer_probing', 'peer_delayed'):
                     raise
@@ -366,15 +465,23 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self._pump()
         self._wait_peer_ready()
 
-    def _peer_io_error(self, error):
-        if self.share_lost is None:
-            self.share_lost = time.monotonic()
+    def _io_recovered(self, channel):
+        previous = self.io_failures.pop(channel, None)
+        if previous is not None:self._trace('shared_io_recovered',channel=channel,outage_seconds=self.liveness.clock()-previous)
+        self.share_lost = min(self.io_failures.values(), default=None)
+
+    def _peer_io_error(self, error, channel='heartbeat'):
+        stamp = self.liveness.clock()
+        self.io_failures.setdefault(channel, stamp)
+        self.share_lost = min(self.io_failures.values())
+        self._trace('shared_io_failure',channel=channel,reason_code='shared_io_unavailable',outage_seconds=stamp-self.share_lost)
         self.report_error(error, recoverable=True)
         self.emit('peer', {'online':False, 'online_problem':{
             'code':'shared_io_unavailable', 'reason':'共享记录访问失败，执行资格尚未确认：'+str(error)}})
-        if self.active and time.monotonic() - self.share_lost >= 30:
+        if self.active and stamp - self.share_lost >= 30:
             raise TechnicalInterruption('共享目录持续不可用，已保留本地记录。',
-                {'code':'shared_io_unavailable', 'io_error':str(error)})
+                {'code':'shared_io_unavailable', 'io_error':str(error),
+                 'failed_channels':list(self.io_failures), 'outage_seconds':stamp-self.share_lost})
 
     def _check_peer_wait(self, job_id, role):
         peer = read_json(self.box.root / 'nodes' / (role + '.json'), {}) or {}
@@ -483,6 +590,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         due = time.monotonic() - self.last_tick >= 1
         if due:
             self.last_tick = time.monotonic()
+        channel = 'heartbeat'
         try:
             if self.connected and due:
                 self._heartbeat()
@@ -495,20 +603,32 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                     peer['online_problem'] = dict(getattr(error, 'details', {}), reason=str(error))
                 peer['online'] = not peer['online_problem']
                 self.emit("peer", peer)
+                problem=peer.get('online_problem') or {}
+                diagnostic_key=(self.liveness.status(),problem.get('code'),self.liveness.verified)
+                if (diagnostic_key!=getattr(self,'last_peer_diagnostic',None)
+                        or time.monotonic()-self.last_diagnostic>=5):
+                    self.last_peer_diagnostic=diagnostic_key;self.last_diagnostic=time.monotonic()
+                    self._trace('peer_observation',peer_instance=peer.get('instance'),peer_seq=peer.get('seq'),
+                        peer_status=self.liveness.status(),peer_verified=self.liveness.verified,
+                        peer_age_seconds=self.liveness.age(),reason_code=problem.get('code'))
+                    self.emit('diagnostic_health',self.diagnostics.health())
+                self._io_recovered('heartbeat')
+                channel = 'sync'
                 self._sync_selected()
+                self._io_recovered('sync')
             if self.active:
+                channel = 'execution'
                 self._control()
                 if self.active.get('workflow') == CONVERSATION_FEATURE:
                     self._unified_steer()
                 self._pump_node_inputs()
-            if due or self.active:
-                self.share_lost = None
-            if self.storage_warning:
+                self._io_recovered('execution')
+            if self.storage_warning and not self.io_failures:
                 self.storage_warning = False
                 self.emit('storage_recovered', {})
                 self.note('共享文件读写已恢复。')
         except OSError as error:
-            self._peer_io_error(error)
+            self._peer_io_error(error, channel)
             return  # keep polling an already sent RPC; never launch a replacement
         if time.monotonic() - self.last_history > 5:
             self.last_history = time.monotonic()
@@ -693,6 +813,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent', error=str(error), time=now())
             self.box.put(job_id, 'call-' + step + '.json', ledger)
             raise
+        self._cache_received_result(job_id,step,view)
         ledger.update(status='result_received', time=now())
         self.box.put(job_id, 'call-' + step + '.json', ledger)
         self.client.pump = self._pump
@@ -990,6 +1111,16 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                         from .projects import update_issue
                         update_issue(self.box.root, args['project'], args['issue_id'], args['status'])
                         self._sync_selected()
+                    elif kind == 'issue_catalog':
+                        if not self.connected:raise ValueError('请先连接节点')
+                        from .projects import project_id
+                        project=project_id(args['project'])
+                        data=read_json(self.box.root/'projects'/project/'issues.json',{'issues':[]})
+                        if (not isinstance(data,dict) or not isinstance(data.get('issues'),list)
+                                or any(not isinstance(i,dict) or not isinstance(i.get('id'),str)
+                                       or not isinstance(i.get('description'),str) for i in data['issues'])):
+                            raise ValueError('后续问题清单格式无效，原文件未修改')
+                        self.emit('issue_catalog',dict(project=project,issues=data['issues']))
                     if self.connected:
                         self._pump()
                         self.unified_tick()
@@ -1010,7 +1141,8 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 _, pending = self.commands.get_nowait()
                 if pending.get('_dispatch'):
                     pending['_dispatch'].close()
-            self.disconnect()
+            try:self.disconnect()
+            finally:self.diagnostics.close()
 
     def stop(self):
         self.shutdown.set()

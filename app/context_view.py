@@ -3,9 +3,12 @@ from .storage import io_path
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import uuid
 from .context import check_prompt
-from .storage import atomic_json, read_json
+from .storage import atomic_json, read_json, _json_guard
 
 FEATURE = 'bounded-context-evidence-v1'
 SOFT_CHARS = 180000  # leaves room for scope, instructions and current input
@@ -33,31 +36,68 @@ def project(value):
                 confirmation=copy.deepcopy(value.get('confirmation')),pending=list(value.get('pending',[])),
                 completed_rounds=value['completed_rounds'],phase=value['phase'])
 
-def save_checked(path,value):
-    old=read_json(path)
-    if old is None:atomic_json(path,value)
-    elif encoded(old)!=encoded(value):raise ValueError('本机上下文证据被改动：'+str(path))
-    if encoded(read_json(path))!=encoded(value):raise ValueError('上下文证据校验失败：'+str(path))
+def save_checked(path,value,create=False):
+    # Immutable evidence reads must not create parent folders or lock files.
+    path=io_path(path)
+    if not path.exists():
+        if not create:raise ValueError('本机上下文证据缺失，未重建：'+str(path))
+        atomic_json(path,value)
+    try:old=json.loads(path.read_text(encoding='utf-8'))
+    except (UnicodeError,json.JSONDecodeError) as error:
+        raise ValueError('本机上下文证据被改动：'+str(path)) from error
+    if encoded(old)!=encoded(value):raise ValueError('本机上下文证据被改动：'+str(path))
 
-def prepare(value, base):
+def prepare(value, base, prior_receipts=()):
     """Materialize peer-origin evidence only in this node's dedicated read-only scope."""
     view=project(value)
     bundle_id=digest({'messages':value['messages'],'confirmed':value.get('confirmed')})
-    root=Path(base)/bundle_id
-    io_path(root).mkdir(parents=True,exist_ok=True)
+    base=Path(base);root=base/bundle_id
     entries=[]
+    objects=[]
     for original,message in zip(value['messages'],view['messages']):
         name='message-'+digest(message)+'.json'
-        save_checked(root/name,message)
+        objects.append((name,message))
         entry=dict(id=message['id'],sequence=message['sequence'],speaker=message['speaker'],file=name,sha256=digest(message))
         if original.get('turn'):
-            save_checked(root/message['evidence_file'],original['turn'])
+            objects.append((message['evidence_file'],original['turn']))
             entry['turn']=dict(file=message['evidence_file'],sha256=digest(original['turn']))
         entries.append(entry)
     index=dict(schema=1,conversation=value['id'],bundle=bundle_id,entries=entries,
                hash_algorithm='SHA-256 of UTF-8 JSON, sorted keys, separators comma/colon, ensure_ascii=False',
                note='仅为保存的证据，不代表已读取或已验证。工具输出为软件捕获片段；不改变用户权限。')
-    save_checked(root/'index.json',index)
+    objects.append(('index.json',index))
+    commit=dict(schema=1,bundle=bundle_id,index_sha256=digest(index))
+    anchor=base/'.committed'/(bundle_id+'.json')
+    references=list(prior_receipts)+[a.get('context_view') for a in value.get('attempts',[])]
+    referenced=any(isinstance(r,dict) and r.get('bundle')==bundle_id for r in references)
+    io_path(anchor.parent).mkdir(parents=True,exist_ok=True)
+    with _json_guard(base/'.committed'/(bundle_id+'.guard')):
+        existed=io_path(root).exists()
+        committed=io_path(anchor).exists()
+        if committed or existed or referenced:
+            if not existed:raise ValueError('已引用的上下文证据包缺失，未重建：'+str(root))
+            if io_path(root).is_symlink() or io_path(root).is_junction():
+                raise ValueError('上下文证据目录被替换为链接')
+            if committed:save_checked(anchor,commit)
+            for name,content in objects:save_checked(root/name,content)
+            # Compatible 0.3.21 bundles are adopted only after full verification.
+            if not committed:save_checked(anchor,commit,create=True)
+        else:
+            stage=base/('.partial-'+bundle_id+'-'+uuid.uuid4().hex)
+            io_path(stage).mkdir(parents=True)
+            try:
+                for name,content in objects:save_checked(stage/name,content,create=True)
+                os.rename(io_path(stage),io_path(root))
+                save_checked(anchor,commit,create=True)
+            except Exception as error:
+                # Keep failure metadata, reclaim only this call's staged bytes.
+                try:
+                    atomic_json(base/('failure-'+stage.name+'.json'),dict(bundle=bundle_id,error=str(error)))
+                    if (stage.resolve().parent==base.resolve() and io_path(stage).exists()
+                            and not io_path(stage).is_symlink() and not io_path(stage).is_junction()):
+                        shutil.rmtree(io_path(stage))
+                except OSError as cleanup_error:error.add_note(str(cleanup_error))
+                raise
     view['evidence']=dict(directory=str(root.resolve()),index='index.json',sha256=digest(index))
     # Do not manufacture a semantic summary. Older answers become explicit full-text references.
     moved=[]

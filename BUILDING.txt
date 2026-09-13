@@ -1,4 +1,4 @@
-AgentLink PyQt5 GUI 0.3.21
+AgentLink PyQt5 GUI 0.3.22
 Build on Windows x64 with Python 3.13 and PyQt5 5.15.11 installed:
   python packaging/build.py
   python packaging/build.py --zip-only

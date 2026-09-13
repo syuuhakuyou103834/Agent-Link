@@ -20,6 +20,51 @@ OMIT_DIRS = {'.git', '.svn', '__pycache__', '.pytest_cache', '.mypy_cache', '.ru
 PRIVATE = {'.env', '.npmrc', '.pypirc', 'id_rsa', 'id_ed25519', 'credentials.json', 'auth.json'}
 
 
+def received_package(local, receipt):
+    token=receipt.get('manifest_sha256','')
+    if not isinstance(token,str) or not re.fullmatch('[a-f0-9]{64}',token):raise ValueError('快照编号无效')
+    return Path(local)/'.received'/token
+
+
+def retain_original(package, local, receipt, manifest, pump=lambda:None, archive=None):
+    """One intentional audit copy per received snapshot, outside the read-only tree."""
+    target=received_package(local,receipt)
+    io_path(target.parent).mkdir(parents=True,exist_ok=True)
+    from .storage import _json_guard, now
+    with _json_guard(target.with_suffix('.guard')):
+        if io_path(target).exists():
+            if (read_json(target/'ready.json')!=receipt or read_json(target/'manifest.json',limit=MAX_MANIFEST)!=manifest
+                    or digest(target/'source.zip',pump=pump)!=receipt['zip_sha256']):
+                raise ValueError('本机原始接收包被改动，未覆盖')
+            verify_archive(target/'source.zip',manifest,pump)
+            if not isinstance(read_json(target/'delivery.json'),dict):raise ValueError('接收核验记录缺失')
+            return target
+        stage=target.parent/('.partial-'+uuid.uuid4().hex)
+        io_path(stage).mkdir()
+        try:
+            payload=stage/'source.zip'
+            if archive is not None:
+                os.replace(io_path(archive),io_path(payload))
+            else:
+                with io_path(package/'source.zip').open('rb') as src,io_path(payload).open('xb') as dst:
+                    for block in iter(lambda:src.read(1024*1024),b''):pump();dst.write(block)
+            if digest(payload,pump=pump)!=receipt['zip_sha256']:raise ValueError('原始接收包损坏')
+            verify_archive(payload,manifest,pump)
+            atomic_json(stage/'manifest.json',manifest);atomic_json(stage/'ready.json',receipt)
+            atomic_json(stage/'delivery.json',dict(schema=1,received_at=now(),
+                manifest_sha256=receipt['manifest_sha256'],zip_sha256=receipt['zip_sha256'],
+                scope='local service verified original ZIP; independent agent reading and testing not established'))
+            os.rename(io_path(stage),io_path(target))
+            return target
+        finally:
+            if (io_path(stage).exists() and canonical_path(stage).parent==canonical_path(target.parent)
+                    and not io_path(stage).is_symlink() and not io_path(stage).is_junction()):
+                try:shutil.rmtree(io_path(stage))
+                except OSError as error:
+                    import logging
+                    logging.getLogger('agentlink.artifacts').warning('接收原包暂存清理待处理：%s',error)
+
+
 @contextmanager
 def project_file(path, root):
     """Check the opened handle before reading bytes, including Windows link races."""
@@ -120,37 +165,90 @@ def publish(root, destination, identifier, job_id, revision, before=None, pump=l
                     **snapshot, changed=changed(before, snapshot))
     token = hashlib.sha256(encoded(manifest)).hexdigest()
     io_path(destination).mkdir(parents=True, exist_ok=True)
+    target = destination / token
+    def existing():
+        receipt = read_json(target / 'ready.json')
+        if not isinstance(receipt, dict) or receipt.get('manifest_sha256') != token:
+            raise ValueError('已有交付回执缺失或损坏')
+        validate_manifest(manifest, receipt)
+        if read_json(target / 'manifest.json', limit=MAX_MANIFEST) != manifest:
+            raise ValueError('已有交付清单冲突')
+        archive = target / 'source.zip'
+        if digest(archive, pump=pump) != receipt.get('zip_sha256'):
+            raise ValueError('已有源码包损坏，未覆盖')
+        verify_archive(archive, manifest, pump)
+        if inventory(root, pump) != snapshot:
+            raise ValueError('源码在核查已有交付时发生变化')
+        return receipt, manifest
+    if io_path(target).exists():
+        return existing()
     stage = destination / ('.partial-' + uuid.uuid4().hex)
     io_path(stage).mkdir()
     archive = stage / 'source.zip'
-    with zipfile.ZipFile(io_path(archive), 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as z:
-        for entry in snapshot['entries']:
-            pump()
-            path = root / entry['path']
-            if entry['kind'] == 'directory':
-                z.writestr(entry['path'] + '/', b'')
-            else:
-                # A second complete inventory detects concurrent user/tool edits.
-                written_hash, written_size = hashlib.sha256(), 0
-                with project_file(path, root) as src, z.open(entry['path'], 'w', force_zip64=True) as dst:
-                    for block in iter(lambda: src.read(1024 * 1024), b''):
-                        pump(); dst.write(block)
-                        written_hash.update(block); written_size += len(block)
-                if written_size != entry['size'] or written_hash.hexdigest() != entry['sha256']:
-                    raise ValueError('源码在打包期间发生变化，ZIP 内容与清单不一致，未发布。')
-    if inventory(root, pump) != snapshot:
-        raise ValueError('源码在打包期间发生变化，未发布不一致快照。')
-    atomic_json(stage / 'manifest.json', manifest)
-    receipt = dict(schema=1, project_id=identifier, job_id=job_id, revision=revision,
-                   manifest_sha256=token, zip_sha256=digest(archive, pump=pump))
-    atomic_json(stage / 'ready.json', receipt)
-    target = destination / token
-    if io_path(target).exists():
-        if read_json(target / 'ready.json') != receipt:
-            raise ValueError('交付编号冲突')
-    else:
-        os.rename(io_path(stage), io_path(target))
-    return receipt, manifest
+    try:
+        with zipfile.ZipFile(io_path(archive), 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as z:
+            for entry in snapshot['entries']:
+                pump()
+                path = root / entry['path']
+                if entry['kind'] == 'directory':
+                    z.writestr(entry['path'] + '/', b'')
+                else:
+                    written_hash, written_size = hashlib.sha256(), 0
+                    with project_file(path, root) as src, z.open(entry['path'], 'w', force_zip64=True) as dst:
+                        for block in iter(lambda: src.read(1024 * 1024), b''):
+                            pump(); dst.write(block)
+                            written_hash.update(block); written_size += len(block)
+                    if written_size != entry['size'] or written_hash.hexdigest() != entry['sha256']:
+                        raise ValueError('源码在打包期间发生变化，ZIP 内容与清单不一致，未发布。')
+        if inventory(root, pump) != snapshot:
+            raise ValueError('源码在打包期间发生变化，未发布不一致快照。')
+        atomic_json(stage / 'manifest.json', manifest)
+        receipt = dict(schema=1, project_id=identifier, job_id=job_id, revision=revision,
+                       manifest_sha256=token, zip_sha256=digest(archive, pump=pump))
+        atomic_json(stage / 'ready.json', receipt)
+        try:
+            os.rename(io_path(stage), io_path(target))
+        except OSError:
+            if not io_path(target).exists():raise
+            # A concurrent publisher may have won with different ZIP metadata.
+            # Reuse its verified original bytes and receipt, not our new digest.
+            return existing()
+        return receipt, manifest
+    except Exception as error:
+        try:
+            atomic_json(destination / (stage.name + '-failure.json'), dict(
+                manifest_sha256=token, error=str(error)[:2048], stage=stage.name))
+        except OSError as recording_error:error.add_note(str(recording_error))
+        raise
+    finally:
+        if io_path(stage).exists():
+            try:
+                if canonical_path(stage).parent != canonical_path(destination) or io_path(stage).is_symlink() or io_path(stage).is_junction():
+                    raise OSError('发布暂存目录边界发生变化')
+                shutil.rmtree(io_path(stage))
+            except OSError as error:
+                import logging
+                logging.getLogger('agentlink.artifacts').warning('发布暂存清理待处理：%s: %s',stage,error)
+                try:atomic_json(destination/(stage.name+'-cleanup.json'),dict(stage=stage.name,status='cleanup_pending',error=str(error)))
+                except OSError:pass
+
+
+def verify_archive(archive, manifest, pump=lambda: None):
+    """Verify original ZIP entries and file hashes without extracting or rewriting."""
+    expected={e['path']+('/' if e['kind']=='directory' else ''):e for e in manifest['entries']}
+    with zipfile.ZipFile(io_path(archive)) as z:
+        infos=z.infolist()
+        if len(infos)!=len(expected) or {i.filename for i in infos}!=set(expected):
+            raise ValueError('已有源码包条目与清单不一致')
+        for info in infos:
+            entry=expected[info.filename]
+            if stat.S_ISLNK(info.external_attr>>16) or info.file_size!=entry.get('size',0):
+                raise ValueError('已有源码包属性不一致')
+            if entry['kind']=='file':
+                h=hashlib.sha256()
+                with z.open(info) as f:
+                    for block in iter(lambda:f.read(1024*1024),b''):pump();h.update(block)
+                if h.hexdigest()!=entry['sha256']:raise ValueError('已有源码包内容损坏')
 
 
 def validate_manifest(m, receipt):
@@ -190,6 +288,7 @@ def receive(destination, local, receipt, pump=lambda: None):
     source = local / token
     if io_path(source).exists():
         verify(source, m, pump)
+        retain_original(package,local,receipt,m,pump)
         return source, m
     stage = local / ('.partial-' + uuid.uuid4().hex)
     io_path(stage).mkdir()
@@ -222,12 +321,13 @@ def receive(destination, local, receipt, pump=lambda: None):
                             pump(); dst.write(block)
         verify(tree, m, pump)
         os.rename(io_path(tree), io_path(source))
+        retain_original(package,local,receipt,m,pump,archive)
         # Only this call's newly-created staging directory is owned here. Never
         # recursively sweep another operation or a published snapshot.
         try:
             if canonical_path(stage).parent != canonical_path(local) or io_path(stage).is_junction() or io_path(stage).is_symlink():
                 raise OSError('接收暂存目录边界发生变化')
-            io_path(archive).unlink()
+            io_path(archive).unlink(missing_ok=True)
             io_path(stage).rmdir()
         except OSError as error:
             import logging

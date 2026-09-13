@@ -12,6 +12,30 @@ _host_guard = None
 _host_guard_lock = threading.Lock()
 
 
+def process_creation(pid):
+    """Return a live process creation FILETIME; None means confirmed absent/exited."""
+    if type(pid) is not int or pid<=0:raise ValueError('Invalid process identity')
+    api=ctypes.WinDLL('kernel32',use_last_error=True)
+    api.OpenProcess.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
+    api.OpenProcess.restype=wintypes.HANDLE
+    api.CloseHandle.argtypes=[wintypes.HANDLE]
+    api.GetProcessTimes.argtypes=[wintypes.HANDLE]+[ctypes.POINTER(wintypes.FILETIME)]*4
+    api.GetExitCodeProcess.argtypes=[wintypes.HANDLE,ctypes.POINTER(wintypes.DWORD)]
+    handle=api.OpenProcess(0x1000,False,pid)
+    if not handle:
+        error=ctypes.get_last_error()
+        if error==87:return None
+        raise ctypes.WinError(error)
+    try:
+        code=wintypes.DWORD()
+        if not api.GetExitCodeProcess(handle,ctypes.byref(code)):raise ctypes.WinError(ctypes.get_last_error())
+        if code.value!=259:return None
+        times=[wintypes.FILETIME() for _ in range(4)]
+        if not api.GetProcessTimes(handle,*(ctypes.byref(t) for t in times)):raise ctypes.WinError(ctypes.get_last_error())
+        return (times[0].dwHighDateTime<<32)|times[0].dwLowDateTime
+    finally:api.CloseHandle(handle)
+
+
 def ensure_host_guard():
     """Guard process creation itself; retained until OS closes host handles.
 

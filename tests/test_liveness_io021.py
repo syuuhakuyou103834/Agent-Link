@@ -15,7 +15,7 @@ class GraceTests(RepairComponentTests):
             self.assertIsNotNone(self.node.share_lost)
             self.assertEqual(self.client.calls,[])
             self.assertNotEqual(self.box.get(self.node.active['id'],'state.json')['status'],'failed')
-            self.node.share_lost=time.monotonic()-31;self.node.last_tick=0
+            self.node.io_failures['heartbeat']=self.node.liveness.clock()-31;self.node.last_tick=0
             with self.assertRaises(TechnicalInterruption) as error:self.node._pump()
             self.assertEqual(error.exception.details['code'],'shared_io_unavailable')
     def test_identity_loss_does_not_receive_grace(self):

@@ -16,7 +16,7 @@ LABELS = {'clarifying':'A 正在澄清', 'awaiting_confirmation':'等待确认',
           'context_blocked':'上下文待处理，未发送',
           'conflict':'要求冲突，等待裁决', 'needs_user_decision':'待用户裁决', 'completed':'已完成',
           'cancelled':'已停止', 'idle':'就绪', 'offline':'离线', 'connecting':'连接中', 'running':'执行中',
-          'failed':'失败', 'incomplete':'未完成'}
+          'failed':'失败', 'incomplete':'未完成','cleanup_pending':'清理待处理'}
 
 
 class MainWindow(W.QMainWindow):
@@ -27,6 +27,7 @@ class MainWindow(W.QMainWindow):
         self.peer={}; self.capabilities={}; self.execution={}; self.storage_warning=False; self.closing=False
         self.conversation=None; self.snapshot={'meta':{},'turns':[],'live':[]}
         self.input_pending=False
+        self.issues_pending=False
         self.setWindowTitle('AgentLink '+__version__+' · 双机协作')
         self.resize(1380,940); self.setMinimumSize(1000,720); self.setStyleSheet(STYLE)
         self.bridge=Bridge();self.bridge.event.connect(self.receive)
@@ -78,6 +79,7 @@ class MainWindow(W.QMainWindow):
         self.prompt.setPlaceholderText('输入任务、工作目录或给本节点的补充…\nEnter 换行，Ctrl + Enter 发送。');main.addWidget(self.prompt)
         row=W.QHBoxLayout();self.context_hint=W.QLabel();self.context_hint.setObjectName('muted');self.context_hint.setWordWrap(True);row.addWidget(self.context_hint,1)
         self.pause_button=button('暂停',self.toggle_pause);row.addWidget(self.pause_button)
+        self.resume_button=button('恢复任务',lambda:self.control('resume'));row.addWidget(self.resume_button)
         self.stop_button=button('停止',lambda:self.control('cancel'));row.addWidget(self.stop_button)
         self.start_button=button('发送给 '+self.settings.role,self.start_discussion,True);row.addWidget(self.start_button);main.addLayout(row)
         shortcut=W.QShortcut(QtGui.QKeySequence('Ctrl+Return'),self);shortcut.activated.connect(self.start_discussion)
@@ -107,7 +109,9 @@ class MainWindow(W.QMainWindow):
         self.input_pending=True;self.update_buttons()
 
     def control(self,action):
-        if self.conversation:self.service.command('conversation_control',conversation_id=self.conversation['id'],action=action)
+        if self.conversation:
+            self.service.command('conversation_control',conversation_id=self.conversation['id'],action=action)
+            if action=='resume':self.input_pending=True;self.update_buttons()
 
     def toggle_pause(self):
         if self.conversation and self.conversation['phase']=='paused':
@@ -161,9 +165,17 @@ class MainWindow(W.QMainWindow):
                 '最近心跳有效；开始步骤时还会核对本场实例与角色锁。'))
             self.render_capabilities()
         elif kind=='capabilities':self.capabilities=value;self.render_capabilities()
+        elif kind=='issue_catalog':
+            self.issues_pending=False
+            project=(self.conversation or {}).get('job_meta',{}).get('project')
+            if project and project['id']==value['project']:self.choose_issue_status(value['project'],value['issues'])
+        elif kind=='diagnostic_health':
+            if value.get('last_error_type') or value.get('dropped_events'):
+                self.statusBar().showMessage('运行诊断有写入失败或丢失事件；任务状态请结合界面与原始记录核查。')
         elif kind=='activity':self.activity.appendPlainText(datetime.fromtimestamp(value['time']).strftime('%H:%M:%S')+' '+value['text'])
         elif kind in ('error','storage_warning'):
             self.input_pending=False
+            self.issues_pending=False
             if kind=='storage_warning':self.storage_warning=True
             self.notice.setProperty('error_kind',kind);self.notice.setText(value['message']);self.notice.show()
         elif kind=='storage_recovered':
@@ -183,15 +195,19 @@ class MainWindow(W.QMainWindow):
                                     and (self.settings.role=='A' or bool(c and c.get('jobs'))))
         self.pause_button.setEnabled(bool(c and c['phase'] in ('working','paused','waiting_peer')))
         self.pause_button.setText('继续' if c and c['phase']=='paused' else '暂停')
+        self.resume_button.setVisible(bool(c and c['phase'] in ('paused','interrupted','chat_interrupted','context_blocked')))
+        self.resume_button.setEnabled(bool(c and not c.get('user_stopped') and self.connected
+            and not self.storage_warning and not self.active_id and not self.input_pending
+            and not getattr(self.service,'chat_active',None) and not getattr(self.service,'cleanup_error','')))
         self.stop_button.setEnabled(bool(c and c['phase'] not in FINISHED))
         self.settings_button.setEnabled(not self.active_id and not getattr(self.service,'chat_active',None))
         self.connect_button.setEnabled(not self.active_id and not getattr(self.service,'chat_active',None))
-        self.issues_button.setEnabled(bool(c and c.get('job_meta',{}).get('project') and self.connected and not self.active_id))
+        self.issues_button.setEnabled(bool(c and c.get('job_meta',{}).get('project') and self.connected and not self.active_id and not self.issues_pending))
         hint='A 会先澄清任务，确认后再开始协作。' if self.settings.role=='A' else '请选择 A 发起的任务，消息会交给本机 B。'
         if legacy:hint='旧版记录可查看和导出；在 A 端新建对话并粘贴需要承接的材料。'
         elif c:
             hint={'awaiting_confirmation':'确认上方任务说明后，输入“开始”。',
-                  'interrupted':'恢复额度或环境后输入“继续”，接回未完成步骤。',
+                  'interrupted':'节点就绪不代表任务已恢复；核查已有结果后点击“恢复任务”，接回未完成步骤。',
                   'chat_interrupted':'对话请求未正常结束；输入“继续”明确恢复，不会自动重发。',
                   'context_blocked':'完整记录和未处理消息已保留；展开详情查看上下文，处理后输入“继续”。',
                   'waiting_peer':'任务说明已保存，等待 B 就绪。',
@@ -322,13 +338,16 @@ class MainWindow(W.QMainWindow):
     def change_issue_status(self):
         project=(self.conversation or {}).get('job_meta',{}).get('project')
         if not project:return
-        data=read_json(Path(self.settings.shared_root)/'projects'/project['id']/'issues.json',{'issues':[]})
-        issues=data['issues']
+        self.issues_pending=True;self.update_buttons()
+        self.service.command('issue_catalog',project=project['id'])
+        self.statusBar().showMessage('正在读取后续问题…')
+
+    def choose_issue_status(self,project,issues):
         if not issues:W.QMessageBox.information(self,'后续问题','暂无已记录问题');return
         choice,ok=W.QInputDialog.getItem(self,'后续问题','选择问题',[v['description'] for v in issues],0,False)
         if not ok:return
         status,ok=W.QInputDialog.getItem(self,'问题状态','状态',['open','resolved','deferred'],0,False)
-        if ok:self.service.command('issue_status',project=project['id'],issue_id=next(i['id'] for i in issues if i['description']==choice),status=status)
+        if ok:self.service.command('issue_status',project=project,issue_id=next(i['id'] for i in issues if i['description']==choice),status=status)
 
     def closeEvent(self,event):
         if not self.service.thread.is_alive():event.accept();return

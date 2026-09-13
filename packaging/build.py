@@ -27,10 +27,12 @@ def copy(source, target):
 
 def compile_cs(source, output, resource=None):
     env = os.environ.copy(); env.update(TEMP=str(TEMP), TMP=str(TEMP))
+    manifest = TEMP / 'AgentLink.manifest'
+    manifest.write_text((ROOT / 'packaging' / 'app.manifest').read_text(encoding='utf-8').replace('AGENTLINK_VERSION', VERSION), encoding='utf-8')
     command = [str(CSC), '/nologo', '/target:winexe', '/platform:anycpu', '/optimize+', '/codepage:65001',
         '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
         '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
-        '/win32manifest:' + str(ROOT / 'packaging' / 'app.manifest'), '/out:' + str(output)]
+        '/win32manifest:' + str(manifest), '/out:' + str(output)]
     if resource:
         command.append('/resource:' + str(resource) + ',payload.zip')
     generated = TEMP / ('generated-' + Path(source).name)

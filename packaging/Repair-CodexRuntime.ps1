@@ -7,6 +7,11 @@ $out = Join-Path $env:LOCALAPPDATA "AgentLinkGUI\diagnostics\codex-runtime-$stam
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 $report = [ordered]@{schema=1; host=$env:COMPUTERNAME; repair_requested=[bool]$Repair; model_requests=0; status='checking'; files=@()}
 try {
+    $versionFile = Join-Path (Split-Path -Parent $PSScriptRoot) 'app\__init__.py'
+    $versionMatch = [regex]::Match((Get-Content -LiteralPath $versionFile -Raw), '__version__\s*=\s*"([^"]+)"')
+    if (-not $versionMatch.Success) { throw 'AgentLink source version is missing.' }
+    $agentLinkVersion = $versionMatch.Groups[1].Value
+    $report.agentlink_version = $agentLinkVersion
     $base = Join-Path $env:LOCALAPPDATA 'OpenAI\Codex\bin'
     if (-not $CodexPath) {
         $settingsFile = Join-Path $env:LOCALAPPDATA 'AgentLinkGUI\settings.json'
@@ -63,7 +68,7 @@ try {
     Write-Host ('Status: ' + $report.status)
     Write-Host ('Codex: ' + $exe)
     foreach($entry in $report.files){Write-Host ($entry.name + ': ' + $entry.exists)}
-    Write-Host 'Restart AgentLink 0.3.16 on both PCs. File presence is not a sandbox or two-PC acceptance test.'
+    Write-Host ('Restart AgentLink ' + $agentLinkVersion + ' on both PCs. File presence is not a sandbox or two-PC acceptance test.')
 } catch {
     $report.status = 'blocked'
     $report.error = $_.Exception.Message

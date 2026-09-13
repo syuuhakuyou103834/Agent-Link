@@ -11,6 +11,7 @@ sys.path.insert(0,str(ROOT))
 from app.protocol import RpcClient
 from app.engine import NodeService
 from app.storage import Settings
+from fixture_paths import fs
 
 class CleanupFailures(unittest.TestCase):
     def exercise(self, failure):
@@ -45,8 +46,8 @@ class CleanupFailures(unittest.TestCase):
             self.assertIsNotNone(process.poll())
             self.assertIsNone(client.process_job)
             client.start();client.close()
-            self.assertFalse((folder/'calls.jsonl').exists())
-            (folder/'result.json').write_text(json.dumps({'failure':failure,'reported':str(error.exception),
+            self.assertFalse(fs(folder/'calls.jsonl').exists())
+            fs(folder/'result.json').write_text(json.dumps({'failure':failure,'reported':str(error.exception),
                 'retained_handle':int(handle),'no_model_requests':True,'admission_blocked':True,
                 'old_server_pid':process.pid,'old_server_exited':True,'reconnect_after_verified_cleanup':True},
                 ensure_ascii=False,indent=2),encoding='utf-8')
