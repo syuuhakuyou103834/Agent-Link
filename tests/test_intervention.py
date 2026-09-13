@@ -51,7 +51,7 @@ class InterventionTests(CodeWorkflowTests):
   self.assertFalse(old.thread.is_alive())
   replacement=NodeService(old.settings,self.root/'B',lambda k,v:self.events['B'].append((k,v)),old.command_override)
   self.nodes['B']=replacement;replacement.start();replacement.command('connect')
-  until(lambda:replacement.connected)
+  until(lambda:replacement.connected and all(n.liveness.status()=="ready" for n in self.nodes.values()))
   self.nodes['A'].command('start',topic='审查 [QUOTA_B_ONCE]',rounds=1,mode='code',project=self.pid,
     recovery={'parent_id':parent.name,'target':'B','text':'重启后继续'})
   until(lambda:(parent/'recovery-child.json').exists())

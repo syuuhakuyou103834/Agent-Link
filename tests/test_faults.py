@@ -94,6 +94,9 @@ class ServiceFaults(SystemTests):
 class ComponentFaults(RepairComponentTests):
     def test_T17_old_result_in_new_job_rejected_before_revision(self):
         self.node.settings.role = 'A'
+        from app.liveness import PeerLiveness
+        self.node.liveness=PeerLiveness('A',self.node.instance)
+        __import__('liveness_fixture').respond(self.node)
         original = self.node._pump
         injected = []
         def pump():

@@ -229,19 +229,22 @@ class RpcClient:
         self.process.stdin.flush()
 
     def request(self, method, params):
+        if method == 'turn/steer': self.steer_send_started = False
         self.counter += 1
         request_id = self.counter
         if method == 'config/read':
             self.sensitive_requests.add(request_id)
         message = {"id": request_id, "method": method, "params": params}
-        guard = getattr(self, 'send_guard', None) if method == 'turn/start' else None
-        if guard:
-            with guard():
-                self.turn_send_started = True
-                self.send(message)
-        else:
+        guard = (getattr(self, 'send_guard', None) if method == 'turn/start'
+                 else getattr(self, 'steer_guard', None) if method == 'turn/steer' else None)
+        def send():
             if method == 'turn/start': self.turn_send_started = True
+            if method == 'turn/steer': self.steer_send_started = True
             self.send(message)
+        if guard:
+            with guard(): send()
+        else:
+            send()
         return request_id
 
     def call(self, method, params, timeout=40):

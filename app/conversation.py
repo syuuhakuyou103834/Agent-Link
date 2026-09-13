@@ -481,6 +481,8 @@ class UnifiedWorkflow:
                 try:
                     self._resume_context(value, key, msg)
                 except (ValueError, RuntimeError) as error:
+                    if getattr(error, 'details', {}).get('code') in ('peer_probing', 'peer_delayed'):
+                        return True  # explicit resume stays pending until the new handshake completes
                     # A failed upgrade check must not erase the old pre-send diagnosis
                     # and make the next resume discard the original pending message.
                     with self.conversations.edit(value['id']) as current:

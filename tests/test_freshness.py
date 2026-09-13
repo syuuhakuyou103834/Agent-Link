@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'tests')]
 from test_repairs import RepairComponentTests
 from app.engine import NodeService, SAFETY_FEATURE
+from app.liveness import FEATURE as LF
 from app.storage import Settings, FileLock, atomic_json, read_json
 
 class FreshnessTests(RepairComponentTests):
@@ -48,7 +49,7 @@ class FreshnessTests(RepairComponentTests):
     def peer_record(self):
         path = self.box.root / 'nodes/A.json'
         peer = read_json(path, {}) or {}
-        peer.update(role='A', instance='a'*32, updated=time.time(), status='idle', features=[SAFETY_FEATURE])
+        peer.update(role='A', instance='a'*32, updated=time.time(), status='idle', features=[SAFETY_FEATURE,LF])
         atomic_json(self.box.root / 'nodes/A-owner.json', {'instance':'a'*32,'role':'A'})
         atomic_json(path, peer)
         return path, peer
@@ -56,9 +57,9 @@ class FreshnessTests(RepairComponentTests):
     def test_T18_expired_offline_invalid_and_replaced_capability_rejected(self):
         self.ready()
         path, normal = self.peer_record()
-        cases = [('offline', {'status':'offline'}), ('stale', {'updated':time.time()-60}),
-                 ('nan_time', {'updated':float('nan')}), ('bool_time', {'updated':True}),
-                 ('future', {'updated':time.time()+60}), ('missing_instance', {'instance':None}),
+        cases = [('offline', {'status':'offline'}), ('sequence_invalid', {'seq':0}),
+                 ('sequence_bool', {'seq':True}), ('sequence_float', {'seq':1.5}),
+                 ('sequence_old', {'seq':1}), ('missing_instance', {'instance':None}),
                  ('new_instance_old_capability', {'instance':'c'*32}), ('missing_features', {'features':None})]
         for name, patch in cases:
             with self.subTest(case=name):

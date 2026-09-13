@@ -27,7 +27,9 @@ from .interruption import (FEATURE as INTERRUPTION_FEATURE, PeerStateError,
 from .storage import (Mailbox, FileLock, Settings, atomic_json, read_json, now,
                       turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES, LONG_TASK_FEATURE)
 
-SAFETY_FEATURE = 'agentlink-execution-lease-v5'
+from .liveness import PeerLiveness, FEATURE as LIVENESS_FEATURE, valid_challenge
+
+SAFETY_FEATURE = 'agentlink-execution-lease-v6'
 
 
 class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
@@ -63,7 +65,9 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.storage_warning = False
         self.last_error_key = None
         self.last_error_at = 0.
-        self.peer_seen = {}
+        self.liveness = PeerLiveness(self.settings.role, self.instance)
+        self.heartbeat_seq = 0
+        self.peer_record = {}
         self.thread = threading.Thread(target=self.run, name="AgentLink-node", daemon=True)
 
     def start(self):
@@ -180,20 +184,20 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
     def workspace(self):
         return str(Path(self.settings.workspace or self.data / "workspace").resolve())
 
-    def _check_peer_compatibility(self, peer=None, expected_instance=None):
+    def _check_peer_compatibility(self, peer=None, expected_instance=None, allow_wait=False):
         if peer is None:
             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
         features = peer.get('features') if isinstance(peer, dict) else None
-        if not isinstance(features, list) or SAFETY_FEATURE not in features:
-            raise ValueError('对端协议不兼容或尚未连接：创建与消息提交协议需要双方升级至 0.3.20。'
+        if not isinstance(features, list) or SAFETY_FEATURE not in features or LIVENESS_FEATURE not in features:
+            raise ValueError('对端协议不兼容或尚未连接：创建与消息提交协议需要双方升级至 0.3.21。'
                              '未创建新场次或启动模型，请更新双方并连接。')
-        problem = self._peer_problem(peer)
         instance = peer.get('instance')
-        if problem:
-            raise PeerStateError('对端在线记录不可用于执行：' + problem['reason'], problem)
         if expected_instance is not None and instance != expected_instance:
             raise PeerStateError('对端已更换实例，原场次不能转交给重启后的执行者。',
-                dict(self._peer_observation(peer), code='peer_instance_changed', expected_instance=expected_instance))
+                dict(self._peer_observation(peer), code='peer_instance_changed'))
+        problem = self._peer_problem(peer)
+        if problem and not (allow_wait and problem['code'] in ('peer_probing', 'peer_delayed')):
+            raise PeerStateError('对端在线记录不可用于执行：' + problem['reason'], problem)
         owner = read_json(self.box.root / 'nodes' / (self.peer_role + '-owner.json'), {}) or {}
         if owner.get('instance') != instance or owner.get('role') != self.peer_role:
             raise ValueError('对端能力与当前角色锁归属不一致。')
@@ -220,33 +224,30 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 if hasattr(self, 'heartbeat_last') else None)
 
     def _peer_problem(self, peer):
-        info = self._peer_observation(peer)
-        age = info['heartbeat_age_seconds']
-        if age is None:
-            code, reason = 'peer_timestamp_invalid', '心跳时间戳缺失或无效'
-        elif not -1 <= now() - peer['updated'] < 12:
-            code = 'peer_clock_ahead' if age < -1 else 'peer_heartbeat_stale'
-            reason = f'节点 {self.peer_role} 心跳时间差 {age:.3f} 秒（允许 -1 到不足 12 秒；可能涉及时钟偏差或心跳延迟）'
-        elif peer.get('status') in (None, 'offline'):
-            code, reason = 'peer_offline', f'节点 {self.peer_role} 已离线或未提供状态'
-        elif peer.get('role') != self.peer_role:
-            code, reason = 'peer_role_invalid', '心跳节点角色不匹配'
-        elif not isinstance(peer.get('instance'), str) or not re.fullmatch('[a-f0-9]{32}', peer['instance']):
-            code, reason = 'peer_instance_invalid', '心跳实例编号无效'
-        else:
-            return None
-        return dict(info, code=code, reason=reason)
+        error = self.liveness.observe(peer)
+        info = dict(self._peer_observation(peer), **self.liveness.details())
+        reasons = {'peer_role_invalid':'心跳节点角色不匹配', 'peer_instance_invalid':'心跳实例编号无效',
+            'peer_offline':'对端已离线', 'peer_protocol_incompatible':'双方需要支持 0.3.21 心跳协议',
+            'peer_sequence_invalid':'心跳序号无效', 'peer_sequence_regressed':'心跳序号倒退，未接受旧记录',
+            'peer_probing':'正在确认对端响应，尚未取得执行资格',
+            'peer_delayed':'对端响应延迟，暂停新请求并等待重新确认',
+            'peer_heartbeat_stale':'对端持续无有效响应，需明确恢复'}
+        code = error or {'ready':None, 'probing':'peer_probing', 'delayed':'peer_delayed',
+                         'unavailable':'peer_heartbeat_stale'}[self.liveness.status()]
+        return dict(info, code=code, reason=reasons[code]) if code else None
 
-    def _check_job_instances(self, meta):
+    def _check_job_instances(self, meta, allow_wait=False):
         participants = meta.get('participants')
         if not isinstance(participants, dict) or participants.get(self.settings.role) != self.instance:
             raise ValueError('场次未绑定当前本机实例，拒绝执行。')
         expected = participants.get(self.peer_role)
         if not isinstance(expected, str):
             raise ValueError('场次缺少对端实例绑定。')
-        return self._check_peer_compatibility(expected_instance=expected)
+        return self._check_peer_compatibility(expected_instance=expected, allow_wait=allow_wait)
 
     def connect(self):
+        self.liveness = PeerLiveness(self.settings.role, self.instance)
+        self.last_tick = 0.
         self.set_status("connecting", "正在连接共享目录与本机 Codex…")
         self.box = Mailbox(self.settings.shared_root, self.data)
         self.box.connect()
@@ -286,7 +287,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             except OSError:
                 pass
         self.connected = False
-        self.peer_seen.clear()
+        self.liveness.reset()
         for lock in self.locks:
             lock.close()
         self.locks.clear()
@@ -313,39 +314,75 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
     def _heartbeat(self, force=False):
         if not self.box or (not self.connected and not force):
             return
+        self._publish_challenge()
+        challenge = read_json(self.box.root / 'nodes' / (self.peer_role + '-challenge.json'), {}, limit=4096) or {}
+        ack = challenge if valid_challenge(challenge, self.peer_role, self.settings.role,
+            target_instance=self.instance) else None
         activity = self.client.activity_snapshot() if self.client and hasattr(self.client, 'activity_snapshot') else None
         record = {"role": self.settings.role, "host": socket.gethostname(), "pid": os.getpid(),
                   "instance": self.instance, "updated": now(), "status": self.status,
+                  "seq": self.heartbeat_seq + 1, "challenge_ack": ack,
                   "job_id": self.active["id"] if self.active else "",
                   "workspace": self.workspace, "sandbox": self.settings.sandbox,
                   "model": self.settings.model, "version": __version__, "capabilities": self.capabilities,
-                  "features": [FEATURE, SAFETY_FEATURE, LONG_TASK_FEATURE, PROJECT_FEATURE, INPUT_FEATURE, CONVERSATION_FEATURE, CONTEXT_VIEW_FEATURE, INTERRUPTION_FEATURE], "execution": activity,
+                  "features": [FEATURE, SAFETY_FEATURE, LIVENESS_FEATURE, LONG_TASK_FEATURE, PROJECT_FEATURE, INPUT_FEATURE, CONVERSATION_FEATURE, CONTEXT_VIEW_FEATURE, INTERRUPTION_FEATURE], "execution": activity,
                   "heartbeat_gap_seconds": round(time.monotonic()-self.heartbeat_last, 3) if hasattr(self, 'heartbeat_last') else None}
         atomic_json(self.box.root / "nodes" / (self.settings.role + ".json"), record)
+        self.heartbeat_seq += 1
         self.heartbeat_last = time.monotonic()
         self.emit('execution', {'role': self.settings.role, 'job_id': record['job_id'], 'execution': activity})
 
+    def _publish_challenge(self):
+        if not self.active and self.liveness.status() == 'unavailable':
+            self.liveness.reset()
+        peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}, limit=65536) or {}
+        self.peer_record = peer
+        self.liveness.observe(peer)
+        challenge = self.liveness.challenge()
+        if challenge:
+            path = self.box.root / 'nodes' / (self.settings.role + '-challenge.json')
+            if read_json(path, {}, limit=4096) != challenge:
+                atomic_json(path, challenge)
+
     def _observe_peer(self, peer):
-        """Track heartbeat changes on this PC's monotonic clock, not peer wall time."""
-        if not isinstance(peer, dict):
-            return float('inf')
-        marker = (peer.get('instance'), peer.get('updated'))
-        stamp = time.monotonic()
-        if marker != self.peer_seen.get('marker') and peer.get('updated') is not None:
-            initial_age = 0
-            if not self.peer_seen:
-                try:
-                    initial_age = min(31, max(0, now() - peer['updated']))
-                except (TypeError, ValueError):
-                    return float('inf')
-            self.peer_seen = {'marker': marker, 'seen_at': stamp - initial_age}
-        return stamp - self.peer_seen.get('seen_at', stamp - 31)
+        self.liveness.observe(peer)
+        return self.liveness.age() if self.liveness.status() == 'ready' else float('inf')
+
+    def _wait_peer_ready(self):
+        # Never called while holding lifecycle/discussion mutation locks.
+        while self.active:
+            try:
+                self._check_job_instances(self.active)
+                return
+            except OSError as error:
+                self._peer_io_error(error)
+            except PeerStateError as error:
+                if error.details.get('code') not in ('peer_probing', 'peer_delayed'):
+                    raise
+            self._pump()
+            time.sleep(0.05)
+
+    def _transfer_pump(self):
+        self._pump()
+        self._wait_peer_ready()
+
+    def _peer_io_error(self, error):
+        if self.share_lost is None:
+            self.share_lost = time.monotonic()
+        self.report_error(error, recoverable=True)
+        self.emit('peer', {'online':False, 'online_problem':{
+            'code':'shared_io_unavailable', 'reason':'共享记录访问失败，执行资格尚未确认：'+str(error)}})
+        if self.active and time.monotonic() - self.share_lost >= 30:
+            raise TechnicalInterruption('共享目录持续不可用，已保留本地记录。',
+                {'code':'shared_io_unavailable', 'io_error':str(error)})
 
     def _check_peer_wait(self, job_id, role):
         peer = read_json(self.box.root / 'nodes' / (role + '.json'), {}) or {}
-        age = self._observe_peer(peer)
-        if age > 30 or peer.get('status') == 'offline':
-            raise Cancelled('对方节点心跳已中断，执行状态无法确认；已停止本场且不自动重发请求。')
+        try:
+            self._check_peer_compatibility(peer, allow_wait=True,
+                expected_instance=(self.active or {}).get('participants', {}).get(role))
+        except ValueError as error:
+            raise TechnicalInterruption(str(error), getattr(error, 'details', {})) from error
         if peer.get('job_id') and peer['job_id'] != job_id:
             other_id = peer['job_id']
             # At a fast handoff the heartbeat can still name the prior completed
@@ -360,15 +397,15 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             return {}
         job_id = self.active["id"]
         self.box.ensure_open(job_id)
+        control = self.box.get(job_id, "control.json", {}) or {}
+        if control.get("cancelled"):
+            raise Cancelled("讨论已停止。")
         try:
-            self._check_job_instances(self.active)
+            self._check_job_instances(self.active, allow_wait=True)
         except ValueError as error:
             raise TechnicalInterruption(f'节点 {self.settings.role} 暂停执行：' + str(error),
                 dict(getattr(error, 'details', {}), kind='peer_unavailable',
                      origin=self.settings.role, peer=self.peer_role)) from error
-        control = self.box.get(job_id, "control.json", {}) or {}
-        if control.get("cancelled"):
-            raise Cancelled("讨论已停止。")
         for role in ("A", "B"):
             failure = self.box.get(job_id, role + "-error.json")
             if failure:
@@ -443,34 +480,36 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         if self.shutdown.is_set():
             raise Cancelled("应用正在退出，已请求停止本机任务。")
         self._drain_controls()
-        if self.active:
-            self._control()
-            if self.active.get('workflow') == CONVERSATION_FEATURE:
-                self._unified_steer()
-            self._pump_node_inputs()
-        if time.monotonic() - self.last_tick < 1:
-            return
-        self.last_tick = time.monotonic()
+        due = time.monotonic() - self.last_tick >= 1
+        if due:
+            self.last_tick = time.monotonic()
         try:
-            if self.connected:
+            if self.connected and due:
                 self._heartbeat()
                 peer_role = "B" if self.settings.role == "A" else "A"
                 peer = read_json(self.box.root / "nodes" / (peer_role + ".json"), {}) or {}
-                peer['online_problem'] = self._peer_problem(peer)
-                peer["online"] = bool(not peer['online_problem'] and self._observe_peer(peer) < 12)
+                try:
+                    self._check_peer_compatibility(peer)
+                    peer['online_problem'] = None
+                except ValueError as error:
+                    peer['online_problem'] = dict(getattr(error, 'details', {}), reason=str(error))
+                peer['online'] = not peer['online_problem']
                 self.emit("peer", peer)
                 self._sync_selected()
-            self.share_lost = None
+            if self.active:
+                self._control()
+                if self.active.get('workflow') == CONVERSATION_FEATURE:
+                    self._unified_steer()
+                self._pump_node_inputs()
+            if due or self.active:
+                self.share_lost = None
             if self.storage_warning:
                 self.storage_warning = False
                 self.emit('storage_recovered', {})
                 self.note('共享文件读写已恢复。')
-        except (OSError, ValueError) as error:
-            if self.share_lost is None:
-                self.share_lost = time.monotonic()
-            self.report_error(error, recoverable=True)
-            if self.active and time.monotonic() - self.share_lost > 15:
-                raise Cancelled("共享目录持续断开，已停止本轮并保留本地记录。")
+        except OSError as error:
+            self._peer_io_error(error)
+            return  # keep polling an already sent RPC; never launch a replacement
         if time.monotonic() - self.last_history > 5:
             self.last_history = time.monotonic()
             self.history()
@@ -612,6 +651,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         role = self.settings.role
         job_id = self.active["id"]
         step = f"{index:03d}-{role}"
+        self._wait_peer_ready()
         with self.box.lifecycle(job_id):
             self.box.validate_meta(self.active, job_id)
             self.box.ensure_open(job_id)
@@ -658,6 +698,9 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.client.pump = self._pump
         view.update(index=index, updated=now(), host=socket.gethostname(), model=self.settings.model,
                     sandbox=self.settings.sandbox, job_id=job_id)
+        if not self.active or self.active['id'] != job_id:
+            raise Cancelled('执行归属已改变，拒绝迟到结果。')
+        self._wait_peer_ready()
         with self.box.lifecycle(job_id):
             if not self.active or self.active['id'] != job_id:
                 raise Cancelled('执行归属已改变，拒绝迟到结果。')
@@ -694,6 +737,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         return text
 
     def _wait_unpaused(self, index):
+        self._wait_peer_ready()
         paused_shown = False
         while self._control().get("paused"):
             if not paused_shown:
@@ -708,7 +752,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             if self.box.get(parent_job_id, 'meta.json', {}).get('mode') == 'code':
                 raise ValueError('项目历史必须在同一项目的代码审查模式中续接。')
             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
-            if (now() - peer.get('updated', 0) >= 12 or peer.get('status') == 'offline'
+            if (self._peer_problem(peer)
                     or FEATURE not in peer.get('features', [])):
                 raise ValueError('继续讨论需要双方连接并支持上下文承接，请将两台更新到 0.3.2 或兼容版本。')
             context = prepare_context(self.box, parent_job_id)
@@ -819,7 +863,10 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
 
     def scan_receiver(self):
         peer = read_json(self.box.root / "nodes" / (self.peer_role + '.json'), {}) or {}
-        if now() - peer.get("updated", 0) > 12 or not peer.get("job_id"):
+        if not peer.get("job_id"):
+            return
+        problem = self._peer_problem(peer)
+        if problem and problem['code'] in ('peer_probing','peer_delayed','peer_heartbeat_stale','peer_offline'):
             return
         job_id = peer["job_id"]
         root = self.box.job(job_id)

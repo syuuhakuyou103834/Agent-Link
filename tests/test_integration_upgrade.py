@@ -109,6 +109,8 @@ class UpgradeTests(unittest.TestCase):
         node.box=box
         atomic_json(box.root/'nodes/B.json',{'job_id':old['id'],'updated':__import__('time').time(),
                                             'instance':'b'*32,'status':'waiting_peer'})
+        lease=__import__('liveness_fixture').owned_peer(node,read_json(box.root/'nodes/B.json'))
+        self.addCleanup(lease.close)
         node._check_peer_wait(new['id'],'B')
         box.put(old['id'],'state.json',{'status':'running'})
         with self.assertRaises(Cancelled):
@@ -129,7 +131,7 @@ class UpgradeServiceTests(unittest.TestCase):
         atomic_json(self.shared/'nodes/B.json',{'role':'B','features':['agentlink-execution-lease-v3'],
                                              'updated':__import__('time').time(),'status':'idle'})
         self.nodes['A'].command('start',topic='reject old peer',rounds=1)
-        until(lambda: any(k=='error' and '0.3.20' in v['message'] for k,v in self.events['A']))
+        until(lambda: any(k=='error' and '0.3.21' in v['message'] for k,v in self.events['A']))
         self.assertEqual(len(list((self.shared/'jobs').iterdir())),0)
         self.assertEqual(self.calls('A')+self.calls('B'),[])
 

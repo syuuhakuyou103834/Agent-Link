@@ -22,6 +22,7 @@ class PeerComponents(RepairComponentTests):
         self.box.put(meta['id'],'state.json',{'status':'running','index':1})
         peer=read_json(self.box.root/'nodes/A.json')
         peer['updated']=time.time()-13
+        self.node.liveness.last_progress-=31
         atomic_json(self.box.root/'nodes/A.json',peer)
         with self.assertRaises(TechnicalInterruption) as caught:self.node._control()
         self.node._failed(caught.exception)
@@ -29,14 +30,14 @@ class PeerComponents(RepairComponentTests):
         self.assertEqual(state['status'],'failed')
         self.assertEqual(state['interruption']['origin'],'B')
         self.assertEqual(state['interruption']['code'],'peer_heartbeat_stale')
-        self.assertGreaterEqual(state['interruption']['heartbeat_age_seconds'],13)
+        self.assertGreaterEqual(state['interruption']['local_silence_seconds'],30)
         self.assertEqual(state['interruption']['request_state'],'not_sent')
         self.assertFalse(self.client.calls)
 
-    def test_ui_and_execution_both_reject_clock_ahead(self):
+    def test_ui_and_execution_both_accept_clock_ahead_after_handshake(self):
         self.ready();peer=read_json(self.box.root/'nodes/A.json');peer['updated']=time.time()+2
-        self.assertEqual(self.node._peer_problem(peer)['code'],'peer_clock_ahead')
-        with self.assertRaises(PeerStateError):self.node._check_peer_compatibility(peer)
+        self.assertIsNone(self.node._peer_problem(peer))
+        self.assertEqual(self.node._check_peer_compatibility(peer),peer['instance'])
         self.assertFalse(self.client.calls)
 
     def test_fresh_occupied_peer_is_accepted(self):

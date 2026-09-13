@@ -128,6 +128,7 @@ class InputOrderTests(Fixture):
         self.assertEqual(self.node.node_input_prompt('000-A'), '')
 
     def test_04_live_steer_uses_same_order(self):
+        self.node._check_job_instances = Mock()  # order-only fixture; real send guards covered by test_liveness021
         meta = self.active_job(); self.enqueue(meta['id'])
         client = SimpleNamespace(current=SimpleNamespace(turn_id='t',thread_id='h',step='000-A',status='running'),responses={})
         client.begin_steer = Mock(side_effect=[(1,'t'),(2,'t')])

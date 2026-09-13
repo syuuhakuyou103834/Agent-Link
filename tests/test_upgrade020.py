@@ -179,6 +179,7 @@ class Upgrade020(unittest.TestCase):
         self.assertEqual(len(self.box.jobs()),count)
 
     def test_B03_budget_preflight_preserves_queued_message(self):
+        self.node._wait_peer_ready=lambda:None  # budget-only fixture; peer gates tested independently
         from app.context import PromptBudgetError
         job,key=self.input_job()
         self.node.active.update(project={'id':'f'*32},task_brief={'permission':'review'})
@@ -236,8 +237,12 @@ class Upgrade020(unittest.TestCase):
         for length in (259,260,262,320):
             with self.subTest(length=length):
                 src=self.root/('source'+str(length));src.mkdir()
-                path=src/('中'*70)/('x'*70)/'data.txt'
-                path=path.parent/('y'*(length-len(str(path.parent))-1))
+                parent=src
+                while length-len(str(parent))-1 > 100:
+                    parent=parent/('中'*min(70,length-len(str(parent))-3))
+                remaining=length-len(str(parent))-1
+                self.assertGreater(remaining,0,'test root leaves no room for target length')
+                path=parent/('y'*remaining)
                 self.assertEqual(len(str(path)),length)
                 io_path(path.parent).mkdir(parents=True,exist_ok=True);io_path(path).write_text('payload',encoding='utf-8')
                 packages=self.root/('packages'+str(length))

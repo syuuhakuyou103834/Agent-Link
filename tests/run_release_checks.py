@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--python', type=Path, default=Path(sys.executable))
     parser.add_argument('--out', type=Path)
     parser.add_argument('--names', nargs='*')
+    parser.add_argument('--keep-going', action='store_true')
     parser.add_argument('--timeout', type=int, default=240)
     args = parser.parse_args()
     if args.out is None:
@@ -39,7 +40,7 @@ def main():
         real_model_requests=0), indent=2), encoding='utf-8')
     env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                TEMP=str(temp), TMP=str(temp), AGENTLINK_TEST_SHARE_ROOT=str(temp / 'share'),
-               AGENTLINK_TEST_OUTPUT_ROOT=str(args.out), AGENTLINK_TEST_WRITE_ROOT=str(args.out))
+               AGENTLINK_TEST_SOURCE_ROOT=str(ROOT), AGENTLINK_TEST_OUTPUT_ROOT=str(args.out), AGENTLINK_TEST_WRITE_ROOT=str(args.out))
     names = args.names if args.names else [p.name for p in sorted((args.root / 'tests').glob('test_*.py'))
                                           if p.name != 'test_endurance.py']
     if any(Path(n).name != n or not n.startswith('test_') or not (ROOT / 'tests' / n).is_file() for n in names):
@@ -86,7 +87,7 @@ def main():
             row['unittest_counts'] = [int(n) for n in re.findall(r'Ran (\d+) tests? in', text)]
             save()
         print(name, row['status'], row['seconds'], flush=True)
-        if row['status'] != 'passed':
+        if row['status'] != 'passed' and not args.keep_going:
             break
     result = {'expected_scripts':len(names), 'completed_scripts':len(rows),
               'passed':len(rows)==len(names) and all(r['status']=='passed' for r in rows),

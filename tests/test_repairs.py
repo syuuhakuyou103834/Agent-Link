@@ -71,6 +71,8 @@ class RepairComponentTests(unittest.TestCase):
             atomic_json(self.box.root / 'nodes' / (role + '.json'), {
                 'instance':identity, 'role':role, 'status':'idle','updated':time.time(),'features':[SAFETY_FEATURE]})
 
+        __import__("liveness_fixture").respond(self.node)
+
     def tearDown(self):
         for lease in self.peer_locks:
             lease.close()
@@ -84,6 +86,7 @@ class RepairComponentTests(unittest.TestCase):
             'protocol': 1, 'job_id': meta['id'], 'index': 1, 'prompt': '合法中文请求'})
         atomic_json(self.box.root / 'nodes' / 'A.json', {'updated': time.time(), 'job_id': meta['id'],
             'features': [SAFETY_FEATURE], 'instance':'a'*32, 'role':'A','status':'idle'})
+        __import__("liveness_fixture").respond(self.node)
         return meta
 
     def test_T18_nine_invalid_meta_via_receiver_zero_claims_history_unchanged(self):
@@ -222,7 +225,7 @@ class RepairServiceTests(unittest.TestCase):
         self.assertFalse(node.thread.is_alive())
         node = self.nodes['A'] = NodeService(node.settings, node.data, node.emit, node.command_override)
         node.start()
-        until(lambda: node.connected)
+        until(lambda: node.connected and all(n.liveness.status()=="ready" for n in self.nodes.values()))
         node.command('start', topic='完成后重复编号', rounds=1, request_id='stable-req')
         until(lambda: not node.start_pending)
         self.assertEqual(len(list((self.shared / 'jobs').iterdir())), 1)

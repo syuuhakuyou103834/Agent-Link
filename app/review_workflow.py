@@ -284,14 +284,14 @@ class ReviewWorkflow(ProjectRecovery):
         io_path(scratch).mkdir(parents=True, exist_ok=True)
         self.execution_stage = 'receiving_snapshot' if role == 'B' else 'inventory_source'
         if role == 'B':
-            source, manifest = artifacts.receive(packages, Path(binding['directory']) / job, receipt, self._pump)
+            source, manifest = artifacts.receive(packages, Path(binding['directory']) / job, receipt, self._transfer_pump)
             if restored:
                 source=restored['source']
-                artifacts.verify(source,manifest,self._pump)
+                artifacts.verify(source,manifest,self._transfer_pump)
             atomic_json(scratch / 'manifest.json', manifest)
         else:
             source = Path(binding['directory'])
-            before = artifacts.inventory(source, self._pump)
+            before = artifacts.inventory(source, self._transfer_pump)
             if receipt:
                 manifest = read_json(packages / receipt['manifest_sha256'] / 'manifest.json', limit=artifacts.MAX_MANIFEST)
                 artifacts.validate_manifest(manifest, receipt)
@@ -346,6 +346,7 @@ class ReviewWorkflow(ProjectRecovery):
         else:
             check_prompt(prompt)
         self.execution_stage = 'preflight'
+        self._wait_peer_ready()
         with self.box.lifecycle(job):
             self.box.ensure_open(job); self._check_job_instances(self.active)
             if not self.box.claim(job, step):
@@ -387,17 +388,17 @@ class ReviewWorkflow(ProjectRecovery):
         view.update(index=index, job_id=job, phase=phase, revision=revision, updated=now(), host=socket.gethostname())
         self.execution_stage = 'publishing_result'
         if phase == 'implement':
-            if read_only_task and artifacts.inventory(source, self._pump) != before:
+            if read_only_task and artifacts.inventory(source, self._transfer_pump) != before:
                 raise ValueError('只读任务中源码发生变化，结果无效')
             receipt, manifest = artifacts.publish(source, packages, binding['id'], job, revision,
-                                                  before=before, pump=self._pump)
+                                                  before=before, pump=self._transfer_pump)
         elif phase == 'review':
-            artifacts.verify(source, manifest, self._pump)
+            artifacts.verify(source, manifest, self._transfer_pump)
             result = review_result(view['answer'], receipt, manifest)
             view['review'] = result
             add_issues(self.box.root, binding['id'], job, revision, result['unrelated_issues'])
             self.box.put(job, 'review-' + str(revision) + '.json', dict(result, source_verified=True))
-        elif artifacts.inventory(source, self._pump) != before:
+        elif artifacts.inventory(source, self._transfer_pump) != before:
             raise ValueError('只读总结期间源码发生变化，最终结果无效。')
         view['artifact'] = receipt
         if manifest:
@@ -420,6 +421,7 @@ class ReviewWorkflow(ProjectRecovery):
             prefix = '审查通过（仅限记录中的验证范围）' if decision == 'passed' and final['decision'] == 'agreed' else '审查阻塞，需用户处理' if decision == 'blocked' or final['decision'] == 'blocked' else '审查未达成一致，需用户裁决'
             view['answer'] = prefix + '\n\n' + final['summary']
             view['blocks'] = [{'text': view['answer'], 'phase': 'final_answer'}]
+        self._wait_peer_ready()
         with self.box.lifecycle(job):
             self.box.ensure_open(job); self._check_job_instances(self.active)
             self.box.put(job, 'turn-' + step + '.json', view)

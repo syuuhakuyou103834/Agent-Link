@@ -153,7 +153,10 @@ class MainWindow(W.QMainWindow):
                 item=W.QListWidgetItem(short+'\n'+datetime.fromtimestamp(entry['created']).strftime('%m/%d %H:%M')+' · '+LABELS.get(entry['status'],entry['status']))
                 item.setData(QtCore.Qt.UserRole,entry['id']);item.setToolTip(text);self.history_list.addItem(item);item.setSelected(entry['id']==self.view_job_id)
         elif kind=='peer':
-            self.peer=value;self.peer_badge.setText('节点 '+self.service.peer_role+(' · 在线' if value.get('online') else ' · 离线'))
+            self.peer=value
+            code=(value.get('online_problem') or {}).get('code')
+            label='就绪' if value.get('online') else {'peer_probing':'确认中','peer_delayed':'响应延迟'}.get(code,'不可执行')
+            self.peer_badge.setText('节点 '+self.service.peer_role+' · '+label)
             self.peer_badge.setToolTip((value.get('online_problem') or {}).get('reason',
                 '最近心跳有效；开始步骤时还会核对本场实例与角色锁。'))
             self.render_capabilities()

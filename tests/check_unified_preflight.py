@@ -21,7 +21,7 @@ def main():
             settings=scoped_settings(asdict(cfg),source,scratch,phase,[])
             settings['permission_profile']['filesystem'][str(evidence.resolve())]='read'
             try:
-                thread=client.new_thread(settings,str(scratch),'AgentLink 0.3.20 permission preflight only. No model turn will be sent.')
+                thread=client.new_thread(settings,str(scratch),'AgentLink 0.3.21 permission preflight only. No model turn will be sent.')
                 results.append(dict(phase=phase,thread_created=bool(thread),profile_confirmed=True))
             except Exception as e:
                 results.append(dict(phase=phase,profile_confirmed=False,error=str(e)))

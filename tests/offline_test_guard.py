@@ -20,7 +20,14 @@ def guard(event, args):
             lower = lower[4:]
         unc = lower.startswith('\\\\') and not lower.startswith('\\\\?\\') or lower.startswith('\\\\?\\unc\\')
         protected = str(Path(os.environ.get('LOCALAPPDATA',''))/'AgentLinkGUI').lower().rstrip('\\')
-        if unc or lower == protected or lower.startswith(protected+'\\'):
+        def within(p, root):
+            return bool(root) and (p == root or p.startswith(root.rstrip('\\')+'\\'))
+        scratch = protected+'\\project-tests'
+        source = os.environ.get('AGENTLINK_TEST_SOURCE_ROOT','').replace('/', '\\').lower().rstrip('\\')
+        output = os.environ.get('AGENTLINK_TEST_WRITE_ROOT','').replace('/', '\\').lower().rstrip('\\')
+        isolated = ((within(source,scratch) and within(lower,source)) or
+                    (within(output,scratch) and within(lower,output)))
+        if unc or ((lower == protected or lower.startswith(protected+'\\')) and not isolated):
             raise PermissionError('OFFLINE TEST blocked production/network path: ' + path)
         write = event in ('os.mkdir','os.remove','os.rmdir','os.rename','os.link','os.symlink')
         if event == 'open':

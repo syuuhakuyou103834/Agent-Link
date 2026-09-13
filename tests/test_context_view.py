@@ -30,7 +30,7 @@ def sample():
 
 class ContextViewTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(prefix='al18-');self.addCleanup(self.tmp.cleanup)
+        self.tmp=tempfile.TemporaryDirectory(prefix='al18-',dir=__import__('app.storage',fromlist=['io_path']).io_path(tempfile.gettempdir()));self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)
 
     def test_large_tools_are_files_and_original_is_unchanged(self):

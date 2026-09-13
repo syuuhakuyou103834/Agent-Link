@@ -26,7 +26,7 @@ class AuthorityTests(RepairComponentTests):
             path=self.box.root/'nodes/A.json'
             peer=read_json(path)
             if fault=='stale':
-                atomic_json(path,dict(peer,updated=time.time()-60))
+                self.node.liveness.last_progress -= 31
             elif fault=='role_lock_lost':
                 self.peer_locks[0].close()
             elif fault=='instance_replaced':
@@ -48,6 +48,7 @@ class AuthorityTests(RepairComponentTests):
                 self.root/'contender',lambda k,v:events.append((k,v)))
             contender.box,contender.connected=self.box,True
             contender.client=Fixture(self.root/'contender')
+            __import__("liveness_fixture").respond(contender)
             contender._check_peer_compatibility()
             contender._admit_start({'request_id':'challenger-'+fault,'topic':'must not take over','rounds':1})
             self.assertTrue(worker.is_alive())

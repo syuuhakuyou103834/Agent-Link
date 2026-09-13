@@ -36,7 +36,7 @@ class SystemTests(unittest.TestCase):
             self.nodes[role] = NodeService(config, self.root / role,
                 lambda kind, value, r=role: self.events[r].append((kind, value)), command)
             self.nodes[role].start()
-        until(lambda: all(n.connected for n in self.nodes.values()))
+        until(lambda: all(n.connected and n.liveness.status()=="ready" for n in self.nodes.values()))
 
     def tearDown(self):
         for node in self.nodes.values():
@@ -122,7 +122,7 @@ class SystemTests(unittest.TestCase):
             previous = self.nodes[role]
             self.nodes[role] = NodeService(previous.settings, previous.data, previous.emit, previous.command_override)
             self.nodes[role].start()
-        until(lambda: all(n.connected for n in self.nodes.values()))
+        until(lambda: all(n.connected and n.liveness.status()=="ready" for n in self.nodes.values()))
         second = self.start_and_finish('A', 'SECOND-EXECUTE-UNIQUE: 按上一轮开始测试', first.name)
         for role, offset, count in (('A', 2, 2), ('B', 1, 1)):
             calls = self.calls(role)[offset:]

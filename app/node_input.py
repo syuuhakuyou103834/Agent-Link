@@ -87,6 +87,13 @@ class NodeInput:
             del pending[key]
         if not current or not current.turn_id or current.status != 'running':
             return
+        control = self.box.get(job, 'control.json', {}) or {}
+        if control.get('paused') or control.get('cancelled'):
+            return
+        try:
+            self._check_job_instances(self.active)
+        except ValueError:
+            return  # preserve queued inputs while peer is not eligible
         for path, value in ordered_inputs(self.box.job(job)):
             if value.get('target') != self.settings.role or value.get('state') != 'queued':
                 continue
@@ -102,10 +109,12 @@ class NodeInput:
                              turn_id=current.turn_id, updated=now())
                 self.box.put(job, path.name, value)
             try:
+                self.client.steer_guard = self._steer_send_guard
+                self.client.steer_send_started = False
                 request_id, expected = self.client.begin_steer(value['text'])
                 pending[value['id']] = (request_id, expected, time.monotonic())
             except Exception as error:
-                value.update(state='uncertain', detail=str(error), updated=now())
+                value.update(state='uncertain' if getattr(self.client, 'steer_send_started', True) else 'queued', detail=str(error), updated=now())
                 self.box.put(job, path.name, value)
                 self.note('定向消息未确认送达，未自动重发。')
 
@@ -142,6 +151,7 @@ class NodeInput:
                           input_commit_schema=1, instance=self.instance)
             self.box.put(job, 'call-' + step + '.json', ledger)
         self.client.send_guard = self._request_send_guard
+        self.client.steer_guard = self._steer_send_guard
 
     def _queued_recovery_inputs(self, parent):
         values = []
@@ -158,6 +168,16 @@ class NodeInput:
                 raise ValueError('恢复定向消息的归属或内容无效')
             values.append(value)
         return values
+
+    @contextmanager
+    def _steer_send_guard(self):
+        # No pump or waits inside a live RPC poll callback.
+        with self.box.lifecycle(self.active['id']):
+            self.box.ensure_open(self.active['id'])
+            if self.box.get(self.active['id'], 'control.json', {}).get('paused'):
+                raise ValueError('讨论已暂停，补充仍待发送')
+            self._check_job_instances(self.active)
+            yield
 
     @contextmanager
     def _request_send_guard(self):

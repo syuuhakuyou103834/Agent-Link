@@ -144,18 +144,21 @@ class WaitingTests(unittest.TestCase):
             self.assertEqual(Settings.load(folder).timeout_seconds, 0)
 
     def test_peer_heartbeat_gap_detected_on_local_monotonic_clock(self):
-        with tempfile.TemporaryDirectory(prefix='agentlink-peer-') as folder:
+        with tempfile.TemporaryDirectory(prefix='agentlink-peer-') as folder, __import__('contextlib').ExitStack() as locks:
             box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
             node = NodeService(Settings(), box.local, lambda *args: None); node.box = box
-            peer = {'updated': time.time(), 'instance': 'peer', 'status': 'running', 'job_id': 'job'}
+            peer = {'updated': time.time(), 'instance': 'b'*32, 'status': 'running', 'job_id': 'job'}
             atomic_json(box.root / 'nodes' / 'B.json', peer)
+            lease=__import__('liveness_fixture').owned_peer(node,peer)
+            locks.callback(lease.close)
             node._check_peer_wait('job', 'B')
-            node.peer_seen['seen_at'] -= 31
-            with self.assertRaisesRegex(Cancelled, '心跳'):
+            node.liveness.last_progress -= 31
+            with self.assertRaises(__import__('app.interruption',fromlist=['TechnicalInterruption']).TechnicalInterruption):
                 node._check_peer_wait('job', 'B')
             # A new heartbeat renews waiting regardless of cross-machine wall-clock skew.
+            node.liveness.reset()
             peer['updated'] -= 3600
-            atomic_json(box.root / 'nodes' / 'B.json', peer)
+            __import__('liveness_fixture').respond(node,peer)
             node._check_peer_wait('job', 'B')
 
     def test_coordinator_waits_past_old_twenty_minute_limit(self):
@@ -186,7 +189,7 @@ class WaitingTests(unittest.TestCase):
             node._perform, node._pump = own, pump
             # Isolate coordinator timing; separate service tests exercise real
             # instance/role/execution gates. Keep result identity validation.
-            node._check_peer_compatibility = lambda **kwargs: 'a' * 32
+            node._check_peer_compatibility = lambda *args, **kwargs: 'a' * 32
             original_put = box.put
             def put(job_id, filename, value):
                 if filename.startswith('turn-'):
