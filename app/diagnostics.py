@@ -64,3 +64,40 @@ class RuntimeJournal:
     def close(self,timeout=.3):
         self.stopping.set()
         if self.thread:self.thread.join(timeout)
+
+
+class DetailedErrors(RuntimeJournal):
+    """Separate private error channel; its failures cannot hide behind event health."""
+    def __init__(self,directory,notify):
+        super().__init__(directory,capacity=64)
+        self.notify=notify
+    def submit(self,record):
+        if self.thread is None:self.start()
+        record=dict(record)
+        for field in ('message','traceback'):
+            if len(record.get(field,''))>65536:
+                record[field]=record[field][:65536];record[field+'_truncated']=True
+        try:self.events.put_nowait(record)
+        except queue.Full:
+            self.dropped+=1;self._notify()
+    def _notify(self):
+        try:self.notify(self.health())
+        except Exception:pass
+    def _write(self,row):
+        io_path(self.directory).mkdir(parents=True,exist_ok=True)
+        path=self.directory/'agentlink-errors.jsonl'
+        if io_path(path).exists() and io_path(path).stat().st_size>=self.max_bytes:
+            io_path(self.directory/'agentlink-errors.jsonl.4').unlink(missing_ok=True)
+            for n in (3,2,1):
+                old=self.directory/('agentlink-errors.jsonl.'+str(n))
+                if io_path(old).exists():os.replace(io_path(old),io_path(self.directory/('agentlink-errors.jsonl.'+str(n+1))))
+            os.replace(io_path(path),io_path(self.directory/'agentlink-errors.jsonl.1'))
+        with io_path(path).open('a',encoding='utf-8') as f:f.write(json.dumps(row,ensure_ascii=False)+'\n')
+    def _run(self):
+        while not self.stopping.is_set() or not self.events.empty():
+            try:row=self.events.get(timeout=.1)
+            except queue.Empty:continue
+            try:self._write(row);self.written+=1;self.last_error_type=''
+            except Exception as error:
+                self.write_failures+=1;self.last_error_type=type(error).__name__
+            finally:self.events.task_done();self._notify()

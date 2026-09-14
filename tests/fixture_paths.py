@@ -21,3 +21,28 @@ def output_root():
     root = Path(name)
     fs(root).mkdir(parents=True, exist_ok=True)
     return root
+
+
+def entries(path,method,*args,**kwargs):
+    """Enumerate through Win32 spelling, return ordinary Paths for relative comparisons."""
+    for value in getattr(fs(path),method)(*args,**kwargs):
+        text=str(value)
+        if text.startswith('\\\\?\\UNC\\'):text='\\\\'+text[8:]
+        elif text.startswith('\\\\?\\'):text=text[4:]
+        yield Path(text)
+
+
+class FixtureTemporaryDirectory(tempfile.TemporaryDirectory):
+    """Only fixture cleanup uses extended paths; product cleanup remains unpatched."""
+    @classmethod
+    def _rmtree(cls,name,ignore_errors=False,repeated=False):
+        target=Path(name).resolve();allowed=output_root().resolve()
+        # Prefix-normalized comparison before recursive deletion of this fixture.
+        def normal(p):
+            text=str(p)
+            if text.startswith('\\\\?\\UNC\\'):text='\\\\'+text[8:]
+            elif text.startswith('\\\\?\\'):text=text[4:]
+            return Path(text)
+        if not normal(target).is_relative_to(normal(allowed)) or normal(target)==normal(allowed):
+            raise ValueError('Refusing fixture cleanup outside owned output root')
+        return super()._rmtree(str(fs(target)),ignore_errors=ignore_errors,repeated=repeated)

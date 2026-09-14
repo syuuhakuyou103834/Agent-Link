@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Fault boundaries and compatibility for the 0.3.22 stability release."""
 import copy,json,os,shutil,sys,threading,time,unittest,uuid
 from pathlib import Path
@@ -56,9 +57,9 @@ class StabilityTests(unittest.TestCase):
         def failed_close():raise RuntimeError('injected cleanup error')
         node.client=SimpleNamespace(close=failed_close,process=None,cleanup_pending=True)
         with self.assertRaisesRegex(RuntimeError,'cleanup error'):node._close_execution()
-        self.assertEqual(read_json(path)['result'],result)
+        self.assertEqual(node._load_received_result('job','000-A')['result'],result)
         with self.assertRaisesRegex(ValueError,'拒绝覆盖'):node._cache_received_result('job','000-A',{'answer':'replacement'})
-        self.assertEqual(read_json(path)['result'],result)
+        self.assertEqual(node._load_received_result('job','000-A')['result'],result)
 
     def test_io_channels_recover_independently_and_new_failure_restarts_clock(self):
         node=NodeService(Settings(shared_root=str(self.root/'share')),self.root/'node',lambda *_:None)
@@ -95,10 +96,10 @@ class StabilityTests(unittest.TestCase):
         args=self.package();fs(args[1]).mkdir();sentinel=args[1]/'.partial-unrelated';fs(sentinel).mkdir()
         fs(sentinel/'keep').write_text('other operation')
         def pump():
-            if len([p for p in fs(args[1]).glob('.partial-*') if p.is_dir()])>1:raise RuntimeError('injected publish interruption')
+            if len([p for p in fs(args[1]).glob('.partial-*') if fs(p).is_dir()])>1:raise RuntimeError('injected publish interruption')
         with self.assertRaisesRegex(RuntimeError,'injected'):artifacts.publish(*args,pump=pump)
         self.assertEqual(fs(sentinel/'keep').read_text(),'other operation')
-        self.assertEqual([p.name for p in fs(args[1]).glob('.partial-*') if p.is_dir()],['.partial-unrelated'])
+        self.assertEqual([p.name for p in fs(args[1]).glob('.partial-*') if fs(p).is_dir()],['.partial-unrelated'])
         self.assertEqual(len(list(fs(args[1]).glob('*-failure.json'))),1)
 
     def test_original_zip_and_receipt_available_outside_verified_source(self):
@@ -129,7 +130,7 @@ class StabilityTests(unittest.TestCase):
         finally:log.close(1)
         files=list(fs(self.root/'logs').glob('runtime-events.jsonl*'))
         self.assertLessEqual(len(files),3)
-        text=''.join(p.read_text(encoding='utf-8') for p in files)
+        text=''.join(fs(p).read_text(encoding='utf-8') for p in files)
         self.assertNotIn('SECRET',text);self.assertNotIn('prompt',text)
         self.assertEqual(read_json(self.root/'logs'/'runtime-state.json')['request_id'],11)
 

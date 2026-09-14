@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 """Numbered review regressions; isolated local fixtures, no real model calls."""
 import copy
 import json
@@ -20,7 +22,7 @@ from app import artifacts
 
 class Fixture(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='review-fix-')
+        self.temp = FixtureTemporaryDirectory(prefix='review-fix-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.box = Mailbox(self.root / 'share', self.root / 'A')
@@ -80,9 +82,9 @@ class RecoveryInheritanceTests(Fixture):
                          participant='old-' + 'AB'[i % 2], by='A', text=f'约束-{i}', state=state, created=i)
             filename = 'input-' + identifier + '.json'
             self.box.put(parent['id'], filename, value)
-            originals[filename] = (self.box.job(parent['id']) / filename).read_bytes()
+            originals[filename] = (fs(self.box.job(parent['id']) / filename)).read_bytes()
         child = self.recover(parent)
-        paths = list(self.box.job(child['id']).glob('input-*.json'))
+        paths = list(entries(self.box.job(child['id']),'glob','input-*.json'))
         self.assertEqual(len(paths), 2)
         for path in paths:
             value = read_json(path)
@@ -91,7 +93,7 @@ class RecoveryInheritanceTests(Fixture):
             self.assertEqual(value['state'], 'queued')
             self.assertEqual(value['inherited_from']['job_id'], parent['id'])
         for filename, data in originals.items():
-            self.assertEqual((self.box.job(parent['id']) / filename).read_bytes(), data)
+            self.assertEqual((fs(self.box.job(parent['id']) / filename)).read_bytes(), data)
 
     def test_01_corrupt_history_blocks_before_child_creation(self):
         parent = self.failed_parent()
@@ -99,7 +101,7 @@ class RecoveryInheritanceTests(Fixture):
         self.box.put(parent['id'], 'context.json', bad)
         with self.assertRaisesRegex(ValueError, '校验失败'):
             self.node.prepare_recovery(parent['id'], 'A', '继续', self.pid)
-        self.assertEqual(len(list((self.box.root / 'jobs').iterdir())), 1)
+        self.assertEqual(len(list(entries(self.box.root / 'jobs','iterdir'))), 1)
 
 
 class InputOrderTests(Fixture):
@@ -147,18 +149,18 @@ class InputOrderTests(Fixture):
 class ExclusionTests(Fixture):
     def test_07_all_env_prefix_files_excluded_from_manifest_and_payload(self):
         import zipfile
-        source=self.root/'source';source.mkdir()
+        source=self.root/'source';fs(source).mkdir()
         private=['.env','.envrc','.ENVRC','.env.example','.environment']
         # Windows is case-insensitive, so test the uppercase spelling separately.
         private.remove('.ENVRC')
-        for name in private: (source/name).write_text('synthetic-secret')
-        (source/'main.py').write_text('print(1)')
-        (source/'environment.py').write_text('x=1')
+        for name in private: (fs(source/name)).write_text('synthetic-secret')
+        (fs(source/'main.py')).write_text('print(1)')
+        (fs(source/'environment.py')).write_text('x=1')
         receipt,manifest=artifacts.publish(source,self.root/'artifacts',self.pid,'test',1)
         self.assertEqual({e['path'] for e in manifest['omitted']},set(private))
-        with zipfile.ZipFile(self.root/'artifacts'/receipt['manifest_sha256']/'source.zip') as z:
+        with zipfile.ZipFile(fs(self.root/'artifacts'/receipt['manifest_sha256']/'source.zip')) as z:
             self.assertEqual(set(z.namelist()),{'main.py','environment.py'})
-        (source/'.envrc').rename(source/'.ENVRC')
+        fs(source/'.envrc').rename(fs(source/'.ENVRC'))
         self.assertIn('.ENVRC',{e['path'] for e in artifacts.inventory(source)['omitted']})
 
 
@@ -197,7 +199,7 @@ class ProjectContextTests(Fixture):
         p=self.box.job(meta['id'])/'turn-002-A.json'
         value=read_json(p);value['phase']='implement';atomic_json(p,value)
         with self.assertRaises(ValueError):prepare_context(self.box,meta['id'])
-        p.unlink()
+        fs(p).unlink()
         with self.assertRaises(ValueError):prepare_context(self.box,meta['id'])
 
 
@@ -224,30 +226,30 @@ class OfflineHistoryTests(Fixture):
 class ArchiveRaceTests(Fixture):
     def test_05_transient_change_during_zip_never_publishes_ready(self):
         from contextlib import contextmanager
-        source=self.root/'source';source.mkdir();p=source/'main.py';p.write_bytes(b'original')
+        source=self.root/'source';fs(source).mkdir();p=source/'main.py';fs(p).write_bytes(b'original')
         original=artifacts.project_file;calls=0
         @contextmanager
         def swap(path,root):
             nonlocal calls
             calls+=1
             transient=calls==2
-            if transient:p.write_bytes(b'modified')
+            if transient:fs(p).write_bytes(b'modified')
             try:
                 with original(path,root) as f:yield f
             finally:
-                if transient:p.write_bytes(b'original')
+                if transient:fs(p).write_bytes(b'original')
         with patch.object(artifacts,'project_file',swap):
             with self.assertRaisesRegex(ValueError,'打包'):
                 artifacts.publish(source,self.root/'packages',self.pid,'test',1)
-        self.assertEqual(p.read_bytes(),b'original')
-        self.assertFalse(list((self.root/'packages').rglob('ready.json')))
+        self.assertEqual(fs(p).read_bytes(),b'original')
+        self.assertFalse(list(entries(self.root/'packages','rglob','ready.json')))
 
     def test_05_unchanged_archive_still_delivers_exact_bytes(self):
-        source=self.root/'source';source.mkdir();data=b'original'*100
-        (source/'main.py').write_bytes(data)
+        source=self.root/'source';fs(source).mkdir();data=b'original'*100
+        (fs(source/'main.py')).write_bytes(data)
         receipt,manifest=artifacts.publish(source,self.root/'packages',self.pid,'test',1)
         result,_=artifacts.receive(self.root/'packages',self.root/'received',receipt)
-        self.assertEqual((result/'main.py').read_bytes(),data)
+        self.assertEqual((fs(result/'main.py')).read_bytes(),data)
 
 
 @unittest.skipUnless(os.name == 'nt','Windows path regression')
@@ -265,8 +267,8 @@ class WindowsPathTests(Fixture):
 
     def test_06_recovery_compares_prefixed_and_plain_paths(self):
         meta=self.failed_parent();self.node.active={'recovery':{'parent_id':meta['id'],'index':0,'text':'继续'}}
-        bound=self.root/'source';bound.mkdir()
-        scratch=self.node.data/'project-tests'/self.pid/'job'/'1';scratch.mkdir(parents=True)
+        bound=self.root/'source';fs(bound).mkdir()
+        scratch=self.node.data/'project-tests'/self.pid/'job'/'1';fs(scratch).mkdir(parents=True)
         atomic_json(self.node.data/'runs'/meta['id']/'000-A-scope.json',{
             'phase':'implement','source':'\\\\?\\'+str(bound), 'scratch':'\\\\?\\'+str(scratch),'snapshot':None})
         result=self.node.recovery_scope({'index':0,'phase':'implement','artifact':None},{'id':self.pid,'directory':str(bound)})

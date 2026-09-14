@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Real NodeService threads and App Server subprocess mocks; no model requests."""
 import json
 from pathlib import Path
@@ -66,19 +67,19 @@ class ConversationTests(SystemTests):
         self.assertEqual(self.phase(),'completed',self.conv().get('error'))
 
     def test_unified_code_review_readonly_full_snapshot(self):
-        project=self.root/'review-src';project.mkdir();(project/'中文.py').write_text('print(1)',encoding='utf-8')
+        project=self.root/'review-src';fs(project).mkdir();(fs(project/'中文.py')).write_text('print(1)',encoding='utf-8')
         self.ready('只读审查，不改代码\n'+str(project));self.finish()
         meta=read_json(self.job()/'meta.json');self.assertEqual(meta['task_brief']['permission'],'review')
         a=self.calls('A')[1]
         rules=next(iter(a['thread_params']['config']['permissions'].values()))['filesystem']
         self.assertEqual(rules[str(project)],'read')
-        self.assertEqual((project/'中文.py').read_text(encoding='utf-8'),'print(1)')
+        self.assertEqual((fs(project/'中文.py')).read_text(encoding='utf-8'),'print(1)')
         b=self.calls('B')[0];b_rules=next(iter(b['thread_params']['config']['permissions'].values()))['filesystem']
         self.assertNotIn(str(project),b_rules)
-        self.assertTrue(list(self.job().glob('artifacts/*/source.zip')))
+        self.assertTrue(list(entries(self.job(),'glob','artifacts/*/source.zip')))
 
     def test_unified_edit_permissions_and_round_upper_bound(self):
-        project=self.root/'edit-src';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'edit-src';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('[EDIT] [NEEDS_CHANGES] 4轮\n'+str(project));self.finish()
         self.assertEqual(self.phase(),'needs_user_decision')
         self.assertEqual(self.conv()['completed_rounds'],4)
@@ -112,7 +113,7 @@ class ConversationTests(SystemTests):
         self.assertEqual(self.calls('A')[0]['thread'],self.calls('A')[1]['thread'])
 
     def test_unified_formal_quota_resumes_B_only(self):
-        project=self.root/'quota-src';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'quota-src';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('[QUOTA_B_ONCE] 只读审查\n'+str(project));self.send('开始')
         until(lambda:self.phase()=='interrupted',35)
         old=self.conv()['job'];self.assertEqual(self.conv()['completed_rounds'],0)

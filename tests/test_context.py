@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 """History transport contracts; no model calls, accounts or production data."""
 import copy
 import json
@@ -14,7 +16,7 @@ from app.context import prepare_context, load_context, context_hash, prompt_cont
 
 class ContextTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='agentlink-context-')
+        self.temp = FixtureTemporaryDirectory(prefix='agentlink-context-')
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
         self.box = Mailbox(root / 'share', root / 'local')
@@ -50,7 +52,7 @@ class ContextTests(unittest.TestCase):
         first_context = prepare_context(self.box, first['id'])
         second = self.completed('第二次', first_context, initiator='B')
         # Relocate only this test's ancestor; no production files are involved.
-        self.box.job(first['id']).rename(self.box.root / 'archived-test-parent')
+        fs(self.box.job(first['id'])).rename(fs(self.box.root / 'archived-test-parent'))
         combined = prepare_context(self.box, second['id'])
         self.assertEqual([r['job_id'] for r in combined['discussions']], [first['id'], second['id']])
         self.assertIn('UNIQUE-T19', prompt_context(combined))
@@ -69,7 +71,7 @@ class ContextTests(unittest.TestCase):
         self.box.put(child['id'], 'context.json', changed)
         with self.assertRaisesRegex(ValueError, '校验失败'):
             load_context(self.box, child)
-        (self.box.job(child['id']) / 'context.json').unlink()
+        (fs(self.box.job(child['id']) / 'context.json')).unlink()
         with self.assertRaises(ValueError):
             load_context(self.box, child)
 
@@ -82,7 +84,7 @@ class ContextTests(unittest.TestCase):
 
     def test_missing_turn_is_rejected(self):
         parent = self.completed()
-        (self.box.job(parent['id']) / 'turn-001-B.json').unlink()
+        (fs(self.box.job(parent['id']) / 'turn-001-B.json')).unlink()
         with self.assertRaisesRegex(ValueError, '不完整'):
             prepare_context(self.box, parent['id'])
 

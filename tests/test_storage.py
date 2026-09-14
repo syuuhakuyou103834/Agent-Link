@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 import ctypes
 import errno
 import json
@@ -17,7 +18,7 @@ from app import storage
 class StorageTests(unittest.TestCase):
     def setUp(self):
         self.root = __import__('fixture_paths').output_root() / ('storage-' + uuid.uuid4().hex)
-        self.root.mkdir(parents=True)
+        fs(self.root).mkdir(parents=True)
         self.path = self.root / 'heartbeat.json'
         storage.atomic_json(self.path, {'text': '中文 23℃', 'version': 1})
 
@@ -28,7 +29,7 @@ class StorageTests(unittest.TestCase):
         self.assertNotEqual(handle, ctypes.c_void_p(-1).value)
         try:
             with self.assertRaises(PermissionError) as caught:
-                self.path.read_bytes()  # 0.3.0 reader via the CRT
+                fs(self.path).read_bytes()  # 0.3.0 reader via the CRT
             self.assertEqual(caught.exception.errno, 13)
             self.assertEqual(storage.read_json(self.path)['text'], '中文 23℃')
         finally:
@@ -58,7 +59,7 @@ class StorageTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 storage.atomic_json(self.path, {'version': 2})
         self.assertEqual(storage.read_json(self.path)['version'], 1)
-        self.assertEqual(list(self.root.glob('*.partial')), [])
+        self.assertEqual(list(entries(self.root,'glob','*.partial')), [])
 
     def test_writer_waits_for_reader_and_lock_is_reusable(self):
         finished, entered, failures = threading.Event(), threading.Event(), []
@@ -77,7 +78,7 @@ class StorageTests(unittest.TestCase):
         self.assertFalse(failures)
         self.assertTrue(finished.is_set())
         self.assertEqual(storage.read_json(self.path)['version'], 2)
-        self.assertTrue((self.root / '.heartbeat.json.io.lock').exists())
+        self.assertTrue((fs(self.root / '.heartbeat.json.io.lock')).exists())
 
     def test_simultaneous_first_guard_creation_is_serialized(self):
         # All contenders open a brand-new zero-byte sidecar concurrently.
@@ -103,7 +104,7 @@ class StorageTests(unittest.TestCase):
     def test_unlocked_initialization_denied_by_existing_range_lock(self):
         import msvcrt
         path=self.root/'legacy-initialize.lock'
-        with path.open('a+b') as first,path.open('a+b') as second:
+        with fs(path).open('a+b') as first,fs(path).open('a+b') as second:
             # A contender can hold the first-byte lock while the file is empty
             # (for example a previous zero-byte sidecar); an unguarded creator's
             # append still targets byte zero. With data already appended, the
@@ -119,7 +120,7 @@ class StorageTests(unittest.TestCase):
 
     def test_missing_and_invalid_json_are_distinct(self):
         self.assertEqual(storage.read_json(self.root / 'missing.json', {}), {})
-        self.path.write_bytes(b'{broken')
+        fs(self.path).write_bytes(b'{broken')
         with self.assertRaises(json.JSONDecodeError):
             storage.read_json(self.path)
 

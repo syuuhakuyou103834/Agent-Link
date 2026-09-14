@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Fail-closed containment setup and repeated start/close on Windows."""
 import ctypes
 from ctypes import wintypes
@@ -15,10 +16,10 @@ from app.process_job import ProcessJob
 class ProcessJobTests(unittest.TestCase):
     def test_server_code_cannot_run_before_job_assignment(self):
         folder = __import__('fixture_paths').output_root() / ('job-' + uuid.uuid4().hex)
-        folder.mkdir(parents=True)
+        fs(folder).mkdir(parents=True)
         marker = folder/'started.txt'
         script = folder/'server.py'
-        script.write_text('from pathlib import Path\nimport runpy,sys\n'
+        fs(script).write_text('from pathlib import Path\nimport runpy,sys\n'
             + 'Path(' + repr(str(marker)) + ').write_text("started")\n'
             + 'sys.argv=' + repr([str(ROOT/'tests/mock_server.py'),'A',str(folder/'calls.jsonl')])
             + '\nrunpy.run_path(sys.argv[0],run_name="__main__")\n', encoding='utf-8')
@@ -26,11 +27,11 @@ class ProcessJobTests(unittest.TestCase):
         original = ProcessJob.assign
         def delayed_assign(job,process):
             time.sleep(.3)
-            self.assertFalse(marker.exists())
+            self.assertFalse(fs(marker).exists())
             original(job,process)
         try:
             with patch.object(ProcessJob,'assign',delayed_assign): client.start()
-            self.assertTrue(marker.exists())
+            self.assertTrue(fs(marker).exists())
         finally:
             client.close()
 
@@ -45,7 +46,7 @@ class ProcessJobTests(unittest.TestCase):
         self.assertIsNone(client.process)
         self.assertIsNone(client.process_job)
         self.assertIsNone(client.log)
-        self.assertFalse((folder/'calls.jsonl').exists())
+        self.assertFalse((fs(folder/'calls.jsonl')).exists())
 
     def test_repeated_start_close_releases_job_handles(self):
         api = ctypes.WinDLL('kernel32')

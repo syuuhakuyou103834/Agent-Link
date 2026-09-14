@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Regression through NodeService + subprocess mock, including 0.3.17 upgrade recovery."""
 import copy
 import json
@@ -26,7 +27,7 @@ class ContextWorkflowTests(ConversationTests):
         return enabled
 
     def test_context_large_tools_real_send_path_and_evidence_scope(self):
-        project=self.root/'project';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'project';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('[LARGE_TOOLS] 只读审查\n'+str(project));self.finish()
         c=self.conv()
         self.assertGreater(len(json.dumps(c['messages'],ensure_ascii=False)),280000)
@@ -39,16 +40,16 @@ class ContextWorkflowTests(ConversationTests):
                 roots=[Path(k) for k,v in rules.items() if 'context-evidence' in k and v=='read']
                 self.assertEqual(len(roots),1)
                 self.assertTrue(roots[0].is_relative_to(self.root/role))
-                self.assertTrue((roots[0]/'index.json').is_file())
+                self.assertTrue((fs(roots[0]/'index.json')).is_file())
         # B receives full A tool records in its local evidence; never direct A source access.
-        index=read_json(next((self.root/'B'/'context-evidence').glob('*/*/index.json')))
+        index=read_json(next(entries(self.root/'B'/'context-evidence','glob','*/*/index.json')))
         self.assertTrue(any(e.get('turn') for e in index['entries']))
 
     def test_context_text_formal_guard_is_before_claim_and_request(self):
         enabled=self.block_formal('A');self.ready();self.send('开始')
         until(lambda:self.phase()=='context_blocked')
-        job=self.conv()['job'];self.assertFalse(list(self.job().glob('*.claim')))
-        self.assertFalse(list(self.job().glob('call-*.json')))
+        job=self.conv()['job'];self.assertFalse(list(entries(self.job(),'glob','*.claim')))
+        self.assertFalse(list(entries(self.job(),'glob','call-*.json')))
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[1,0])
         time.sleep(.5);self.assertEqual(self.phase(),'context_blocked')
         self.assertFalse(self.conv()['context_error']['request_sent'])
@@ -59,15 +60,15 @@ class ContextWorkflowTests(ConversationTests):
 
     def test_context_code_formal_guard_is_before_claim_and_request(self):
         enabled=self.block_formal('B')
-        project=self.root/'project';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'project';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('只读审查\n'+str(project));self.send('开始')
         until(lambda:self.phase()=='context_blocked',35)
-        job=self.conv()['job'];a=(self.job()/'turn-000-A.json').read_bytes()
-        self.assertFalse((self.job()/'001-B.claim').exists());self.assertFalse(self.calls('B'))
+        job=self.conv()['job'];a=(fs(self.job()/'turn-000-A.json')).read_bytes()
+        self.assertFalse((fs(self.job()/'001-B.claim')).exists());self.assertFalse(self.calls('B'))
         enabled[0]=False;self.send('继续','B')
         until(lambda:self.phase()=='completed',35)
         self.assertEqual(self.conv()['job'],job)
-        self.assertEqual((self.job()/'turn-000-A.json').read_bytes(),a)
+        self.assertEqual((fs(self.job()/'turn-000-A.json')).read_bytes(),a)
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[3,1])
 
     def test_context_chat_preserves_unsent_message_on_resume(self):
@@ -86,14 +87,14 @@ class ContextWorkflowTests(ConversationTests):
 
     def legacy_upgrade(self, resume_role):
         self.block_formal('A',summary_only=True)
-        project=self.root/'project';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'project';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('[LARGE_TOOLS] 只读审查\n'+str(project));self.send('开始')
         until(lambda:self.phase()=='context_blocked',35)
         self.assertEqual(self.conv()['completed_rounds'],1)
         self.send('B 原补充：在本地验证想法 PENDING-B-18','B')
         until(lambda:bool(self.conv()['pending']))
         old=self.conv()['job'];old_path=self.shared/'jobs'/old
-        frozen={p.name:p.read_bytes() for p in old_path.glob('turn-*.json')}
+        frozen={p.name:fs(p).read_bytes() for p in entries(old_path,'glob','turn-*.json')}
         cid=self.conv()['id']
         for node in self.nodes.values():node.stop()
         for node in self.nodes.values():node.thread.join(15);self.assertFalse(node.thread.is_alive())
@@ -112,7 +113,7 @@ class ContextWorkflowTests(ConversationTests):
         c=self.conv();self.assertEqual(len(c['jobs']),2);self.assertNotEqual(c['job'],old)
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[3,2],'A implement and B review each once')
         self.assertEqual(c['completed_rounds'],1);self.assertFalse(c['pending'])
-        self.assertEqual({p.name:p.read_bytes() for p in old_path.glob('turn-*.json')},frozen)
+        self.assertEqual({p.name:fs(p).read_bytes() for p in entries(old_path,'glob','turn-*.json')},frozen)
         bchat=self.calls('B')[-1]
         current=json.JSONDecoder().raw_decode(bchat['prompt'].split('\n当前消息：\n')[1])[0]
         self.assertIn('PENDING-B-18',current['text']);self.assertEqual(current['target'],'B')

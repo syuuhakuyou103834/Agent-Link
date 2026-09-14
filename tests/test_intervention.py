@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 from pathlib import Path
 import sys,json,time
 sys.path.insert(0,str(Path(__file__).parent))
@@ -11,20 +12,20 @@ class InterventionTests(CodeWorkflowTests):
   self.nodes['A'].command('start',topic='审查 [QUOTA_B_ONCE]',rounds=1,mode='code',project=self.pid)
   until(lambda:self.state()=='failed',45)
   until(lambda:all(not n.active for n in self.nodes.values()))
-  parent=self.job();original=(parent/'state.json').read_bytes()
+  parent=self.job();original=(fs(parent/'state.json')).read_bytes()
   self.assertEqual([len(self.calls(r)) for r in ('A','B')],[1,1])
   self.assertIn('部分独立检查',read_json(parent/'live-B.json')['answer'])
   time.sleep(.5);self.assertEqual(len(self.calls('B')),1)
   self.nodes['A'].command('start',topic='审查 [QUOTA_B_ONCE]',rounds=1,mode='code',project=self.pid,
     recovery={'parent_id':parent.name,'target':'B','text':'额度恢复，继续未完成步骤'})
-  until(lambda:(parent/'recovery-child.json').exists(),20)
+  until(lambda:(fs(parent/'recovery-child.json')).exists(),20)
   child=self.shared/'jobs'/read_json(parent/'recovery-child.json')['job_id']
   until(lambda:read_json(child/'state.json',{}).get('status') in ('completed','failed'),60)
   self.assertEqual(read_json(child/'state.json')['status'],'completed',str(read_json(child/'state.json')))
   until(lambda:all(not n.active for n in self.nodes.values()))
   self.assertEqual([len(self.calls(r)) for r in ('A','B')],[2,2])
   self.assertEqual(self.calls('B')[0]['thread'],self.calls('B')[1]['thread'])
-  self.assertEqual((parent/'state.json').read_bytes(),original)
+  self.assertEqual((fs(parent/'state.json')).read_bytes(),original)
   self.assertEqual(read_json(child/'turn-000-A.json')['inherited_from']['job_id'],parent.name)
   self.assertIn('累计请求尝试数：4',read_json(child/'report.json')['text'])
  def failed_parent(self):
@@ -41,7 +42,7 @@ class InterventionTests(CodeWorkflowTests):
   io_path(Path(scope['source'])/'main.py').write_text('tampered',encoding='utf-8')
   self.nodes['A'].command('start',topic='审查 [QUOTA_B_ONCE]',rounds=1,mode='code',project=self.pid,
     recovery={'parent_id':parent.name,'target':'B','text':'继续'})
-  until(lambda:(parent/'recovery-child.json').exists())
+  until(lambda:(fs(parent/'recovery-child.json')).exists())
   child=self.shared/'jobs'/read_json(parent/'recovery-child.json')['job_id']
   until(lambda:read_json(child/'state.json',{}).get('status')=='failed')
   self.assertEqual([len(self.calls(r)) for r in ('A','B')],[1,1])
@@ -54,7 +55,7 @@ class InterventionTests(CodeWorkflowTests):
   until(lambda:replacement.connected and all(n.liveness.status()=="ready" for n in self.nodes.values()))
   self.nodes['A'].command('start',topic='审查 [QUOTA_B_ONCE]',rounds=1,mode='code',project=self.pid,
     recovery={'parent_id':parent.name,'target':'B','text':'重启后继续'})
-  until(lambda:(parent/'recovery-child.json').exists())
+  until(lambda:(fs(parent/'recovery-child.json')).exists())
   child=self.shared/'jobs'/read_json(parent/'recovery-child.json')['job_id']
   until(lambda:read_json(child/'state.json',{}).get('status') in ('failed','completed'),60)
   self.assertEqual(read_json(child/'state.json')['status'],'completed',str(read_json(child/'state.json')))
@@ -70,9 +71,9 @@ class InterventionTests(CodeWorkflowTests):
   self.nodes['B'].command('node_input',target='A',text='仅给A：先核查证据',note_id='a'*32)
   until(lambda:read_json(job/('input-'+'a'*32+'.json'),{}).get('state')=='delivered',10)
   self.nodes['A'].command('cancel');until(lambda:all(not n.active for n in self.nodes.values()))
-  rpc=[json.loads(x) for x in Path(str(self.root/'A-calls.jsonl')+'.rpc.jsonl').read_text(encoding='utf-8').splitlines()]
+  rpc=[json.loads(x) for x in fs(Path(str(self.root/'A-calls.jsonl')+'.rpc.jsonl')).read_text(encoding='utf-8').splitlines()]
   self.assertEqual(len([x for x in rpc if x['method']=='turn/steer']),1)
-  brpc=Path(str(self.root/'B-calls.jsonl')+'.rpc.jsonl').read_text(encoding='utf-8')
+  brpc=fs(Path(str(self.root/'B-calls.jsonl')+'.rpc.jsonl')).read_text(encoding='utf-8')
   self.assertNotIn('仅给A：先核查证据',brpc)
   self.assertEqual(len(self.calls('A')),1)
 

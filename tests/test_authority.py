@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Controlled in-flight fixture and real local discussion lease; no hard crash or SMB."""
 import json
 from pathlib import Path
@@ -53,27 +54,27 @@ class AuthorityTests(RepairComponentTests):
             contender._admit_start({'request_id':'challenger-'+fault,'topic':'must not take over','rounds':1})
             self.assertTrue(worker.is_alive())
             self.assertTrue(contender.commands.empty())
-            self.assertEqual(len(list((self.box.root/'jobs').iterdir())),1)
+            self.assertEqual(len(list(entries(self.box.root/'jobs','iterdir'))),1)
             self.assertEqual(contender.client.calls,[])
             self.assertTrue(any(k=='error' and '冲突' in v['message'] for k,v in events))
             with self.assertRaises(RuntimeError):
                 FileLock(self.box.root/'discussion.lease').acquire()
             # Explicit terminal fence while the old response remains held.
             contender._edit_control(old['id'],'cancel','')
-            before=(self.box.job(old['id'])/'state.json').read_bytes()
+            before=(fs(self.box.job(old['id'])/'state.json')).read_bytes()
             contender._admit_start({'request_id':'after-fence-'+fault,'topic':'still held','rounds':1})
             self.assertTrue(contender.commands.empty())
             self.assertTrue(worker.is_alive())
             self.client.release.set()
             worker.join(5)
             self.assertFalse(worker.is_alive())
-            self.assertEqual((self.box.job(old['id'])/'state.json').read_bytes(),before)
-            self.assertFalse((self.box.job(old['id'])/'turn-000-B.json').exists())
-            self.assertFalse((self.box.job(old['id'])/'request-001-A.json').exists())
+            self.assertEqual((fs(self.box.job(old['id'])/'state.json')).read_bytes(),before)
+            self.assertFalse((fs(self.box.job(old['id'])/'turn-000-B.json')).exists())
+            self.assertFalse((fs(self.box.job(old['id'])/'request-001-A.json')).exists())
             self.assertEqual(len(self.client.calls),1)
             with FileLock(self.box.root/'discussion.lease'):
                 pass
-            (self.root/'authority-result.json').write_text(json.dumps({
+            (fs(self.root/'authority-result.json')).write_text(json.dumps({
                 'fault':fault,'old_job':old['id'],'old_requests':1,'contender_requests':0,
                 'worker_alive_during_both_rejections':True,'discussion_lease_held_until_worker_exit':True,
                 'late_result_rejected':True,'terminal_unchanged':True,

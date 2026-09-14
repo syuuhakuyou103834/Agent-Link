@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Local service-path crash/publication/cancellation windows."""
 import json
 from pathlib import Path
@@ -19,7 +20,7 @@ class ServiceFaults(SystemTests):
                 before = sum(len(self.calls(r)) for r in ('A', 'B'))
                 self.nodes['A'].command('start', topic='[' + marker + '] injected error', rounds=1)
                 until(lambda: not self.nodes['A'].start_pending and all(not n.active for n in self.nodes.values()))
-                job = max((self.shared / 'jobs').iterdir(), key=lambda p: p.stat().st_ctime_ns)
+                job = max(entries(self.shared / 'jobs','iterdir'), key=lambda p: fs(p).stat().st_ctime_ns)
                 self.assertEqual(read_json(job / 'state.json')['status'], 'failed')
                 self.assertTrue(read_json(job / 'A-error.json')['message'])
                 self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')) - before, 1)
@@ -62,11 +63,11 @@ class ServiceFaults(SystemTests):
                     job = self.shared / 'jobs' / executor.active['id']
                     other.command('cancel')
                     until(lambda: read_json(job / 'state.json', {}).get('status') == 'cancelled')
-                    committed = (job / 'state.json').read_bytes()
+                    committed = (fs(job / 'state.json')).read_bytes()
                     release.set()
                     until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
-                    self.assertEqual((job / 'state.json').read_bytes(), committed)
-                    self.assertFalse((job / f'turn-{target:03d}-{role}.json').exists())
+                    self.assertEqual((fs(job / 'state.json')).read_bytes(), committed)
+                    self.assertFalse((fs(job / f'turn-{target:03d}-{role}.json')).exists())
                     self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')) - before, target + 1)
                 finally:
                     release.set()
@@ -77,12 +78,12 @@ class ServiceFaults(SystemTests):
         old = node.box.create('stranded after crash', 1, 'A')
         node.box.put(old['id'], 'state.json', {'status': 'running', 'index': 0})
         node.box.claim(old['id'], '000-A')
-        before = (node.box.job(old['id']) / 'state.json').read_bytes()
+        before = (fs(node.box.job(old['id']) / 'state.json')).read_bytes()
         node.command('start', topic='must reject', rounds=1)
         until(lambda: not node.start_pending)
         self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')), 0)
-        self.assertEqual(len(list((self.shared / 'jobs').iterdir())), 1)
-        self.assertEqual((node.box.job(old['id']) / 'state.json').read_bytes(), before)
+        self.assertEqual(len(list(entries(self.shared / 'jobs','iterdir'))), 1)
+        self.assertEqual((fs(node.box.job(old['id']) / 'state.json')).read_bytes(), before)
         self.assertTrue(any(k == 'error' and '不确定' in v['message'] for k,v in self.events['A']))
         node.selected = old['id']
         node.command('cancel')
@@ -104,7 +105,7 @@ class ComponentFaults(RepairComponentTests):
             if not self.node.active or injected:
                 return
             job = self.box.job(self.node.active['id'])
-            if (job / 'request-001-B.json').exists():
+            if (fs(job / 'request-001-B.json')).exists():
                 self.box.put(job.name, 'turn-001-B.json', {'role': 'B', 'status': 'completed',
                     'job_id': '20260910-000000-' + 'a' * 32, 'index': 1,
                     'step': '001-B', 'answer': 'OLD RESULT'})
@@ -113,7 +114,7 @@ class ComponentFaults(RepairComponentTests):
         self.node.run_initiator('reject old result', 1)
         self.assertEqual(len(self.client.calls), 1)
         self.assertEqual(read_json(injected[0] / 'state.json')['status'], 'failed')
-        self.assertFalse((injected[0] / 'turn-002-A.json').exists())
+        self.assertFalse((fs(injected[0] / 'turn-002-A.json')).exists())
 
     def test_T11_result_cached_shared_publish_fails_no_resend(self):
         meta = self.ready()
@@ -130,7 +131,7 @@ class ComponentFaults(RepairComponentTests):
             self.node._failed(error.exception)
         cached = self.box.cache(meta['id']) / 'turn-001-B.json'
         self.assertEqual(read_json(cached)['status'], 'completed')
-        self.assertFalse((self.box.job(meta['id']) / cached.name).exists())
+        self.assertFalse((fs(self.box.job(meta['id']) / cached.name)).exists())
         self.assertEqual(self.box.get(meta['id'], 'state.json')['status'], 'failed')
         self.node.active = None
         self.node.scan_receiver()

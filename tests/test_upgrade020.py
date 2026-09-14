@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """0.3.19 review regressions. Real local files; no services or model requests."""
 import os
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -22,7 +23,7 @@ from app import artifacts, __version__
 class Upgrade020(unittest.TestCase):
     def setUp(self):
         self.root = output_root() / ('u20-' + uuid.uuid4().hex[:8])
-        self.root.mkdir(parents=True)
+        fs(self.root).mkdir(parents=True)
         self.node = NodeService(Settings(shared_root=str(self.root/'share'), auto_connect=False), self.root/'A', lambda *a: None)
         self.box = self.node.box = Mailbox(self.root/'share', self.root/'A')
         self.box.connect()
@@ -63,9 +64,10 @@ class Upgrade020(unittest.TestCase):
     def test_A06_long_conversation_is_listed(self):
         c = Conversations(self.root/'long', self.root/'cache')
         cid = 'conversation-'+'a'*32
-        padding = 262 - len(str(c.path(cid))) - 1
+        target=max(262,len(str(c.path(cid)))+2)
+        padding = target - len(str(c.path(cid))) - 1
         c.root = c.root / ('x'*padding)
-        self.assertEqual(len(str(c.path(cid))),262)
+        self.assertEqual(len(str(c.path(cid))),target)
         atomic_json(c.path(cid),dict(schema=1,id=cid,created=1))
         self.assertIsNotNone(c.get(cid))
         self.assertEqual([v['id'] for v in c.list()],[cid])
@@ -99,7 +101,7 @@ class Upgrade020(unittest.TestCase):
         self.assertEqual(detail['request_state'],'interrupted_uncertain')
 
     def test_A04_successful_receive_removes_payload(self):
-        src=self.root/'src';src.mkdir();(src/'file.txt').write_text('data')
+        src=self.root/'src';fs(src).mkdir();(fs(src/'file.txt')).write_text('data')
         receipt,manifest=artifacts.publish(src,self.root/'packages','f'*32,'job',1)
         received,_=artifacts.receive(self.root/'packages',self.root/'received',receipt)
         artifacts.verify(received,manifest)
@@ -119,7 +121,7 @@ class Upgrade020(unittest.TestCase):
         meta=self.box.create('discuss',1,unlimited=True)
         meta.update(project={'id':'f'*32},task_brief={'permission':'discuss'})
         self.node.active=meta
-        source=self.root/'snapshot';source.mkdir()
+        source=self.root/'snapshot';fs(source).mkdir()
         self.node._project=lambda *a,**k:dict(id='f'*32,directory=str(self.root/'received'),dependencies=[])
         self.node.recovery_scope=lambda *a:None
         captured=[]
@@ -183,7 +185,7 @@ class Upgrade020(unittest.TestCase):
         from app.context import PromptBudgetError
         job,key=self.input_job()
         self.node.active.update(project={'id':'f'*32},task_brief={'permission':'review'})
-        src=self.root/'project';src.mkdir();(src/'main.py').write_text('print(1)')
+        src=self.root/'project';fs(src).mkdir();(fs(src/'main.py')).write_text('print(1)')
         self.node._project=lambda *a,**k:dict(id='f'*32,directory=str(src),dependencies=[])
         self.node.recovery_scope=lambda *a:None
         self.node._pump=lambda:None
@@ -236,7 +238,7 @@ class Upgrade020(unittest.TestCase):
     def test_A06_long_snapshot_end_to_end(self):
         for length in (259,260,262,320):
             with self.subTest(length=length):
-                src=self.root/('source'+str(length));src.mkdir()
+                src=self.root/('source'+str(length));fs(src).mkdir()
                 parent=src
                 while length-len(str(parent))-1 > 100:
                     parent=parent/('中'*min(70,length-len(str(parent))-3))
@@ -257,19 +259,19 @@ class Upgrade020(unittest.TestCase):
         self.assertEqual(self.box.get(job,'state.json')['interruption']['request_state'],'UNKNOWN')
 
     def test_A04_failed_receive_keeps_diagnostic_without_duplicate_payload(self):
-        src=self.root/'src';src.mkdir();(src/'file').write_text('preserved')
+        src=self.root/'src';fs(src).mkdir();(fs(src/'file')).write_text('preserved')
         receipt,_=artifacts.publish(src,self.root/'packages','f'*32,'job',1)
         with patch.object(artifacts,'verify',side_effect=ValueError('injected corrupt snapshot')):
             with self.assertRaisesRegex(ValueError,'corrupt snapshot'):
                 artifacts.receive(self.root/'packages',self.root/'received',receipt)
         stage=next(io_path(self.root/'received').glob('.partial-*'))
-        self.assertTrue((stage/'failure.json').is_file())
-        self.assertFalse((stage/'payload.zip').exists())
-        self.assertFalse((stage/'tree').exists())
-        self.assertTrue((self.root/'packages'/receipt['manifest_sha256']/'source.zip').is_file())
+        self.assertTrue((fs(stage/'failure.json')).is_file())
+        self.assertFalse((fs(stage/'payload.zip')).exists())
+        self.assertFalse((fs(stage/'tree')).exists())
+        self.assertTrue((fs(self.root/'packages'/receipt['manifest_sha256']/'source.zip')).is_file())
 
     def test_A04_cleanup_failure_does_not_hide_published_snapshot(self):
-        src=self.root/'src';src.mkdir();(src/'file').write_text('preserved')
+        src=self.root/'src';fs(src).mkdir();(fs(src/'file')).write_text('preserved')
         receipt,manifest=artifacts.publish(src,self.root/'packages','f'*32,'job',1)
         original=Path.unlink
         def deny(path,*a,**k):

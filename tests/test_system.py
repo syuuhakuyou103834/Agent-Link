@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 import json
 import os
 from pathlib import Path
@@ -25,8 +26,8 @@ def until(predicate, seconds=25):
 class SystemTests(unittest.TestCase):
     def setUp(self):
         self.root = __import__('fixture_paths').output_root() / uuid.uuid4().hex
-        self.root.mkdir(parents=True)
-        (self.root / 'case.txt').write_text(self.id(), encoding='utf-8')
+        fs(self.root).mkdir(parents=True)
+        (fs(self.root / 'case.txt')).write_text(self.id(), encoding='utf-8')
         self.shared = (Path(os.environ['AGENTLINK_TEST_SHARE_ROOT']) / ('e2e-' + self.root.name)
                        if os.environ.get('AGENTLINK_TEST_SHARE_ROOT') else self.root / 'share')
         self.nodes, self.events = {}, {'A': [], 'B': []}
@@ -46,12 +47,12 @@ class SystemTests(unittest.TestCase):
             self.assertFalse(node.thread.is_alive(), 'Node must close cleanly')
 
     def job(self):
-        paths = sorted((self.shared / 'jobs').iterdir())
+        paths = sorted(entries(self.shared / 'jobs','iterdir'))
         return paths[-1] if paths else None
 
     def calls(self, role):
         path = self.root / (role + '-calls.jsonl')
-        return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()] if path.exists() else []
+        return [json.loads(line) for line in fs(path).read_text(encoding='utf-8').splitlines()] if fs(path).exists() else []
 
     def state(self):
         path = self.job()
@@ -64,12 +65,12 @@ class SystemTests(unittest.TestCase):
         self.assertEqual([len(self.calls(r)) for r in ('A', 'B')], [3, 2])
         for role in ('A', 'B'):
             self.assertEqual(len({c['thread'] for c in self.calls(role)}), 1)
-            until(lambda r=role: (self.root / r / 'runs' / self.job().name / 'discussion.txt').exists())
-            record = (self.root / role / 'runs' / self.job().name / 'discussion.txt').read_text(encoding='utf-8')
+            until(lambda r=role: (fs(self.root / r / 'runs' / self.job().name / 'discussion.txt')).exists())
+            record = (fs(self.root / role / 'runs' / self.job().name / 'discussion.txt')).read_text(encoding='utf-8')
             self.assertIn('温度 23℃', record)
         self.assertIn('中文传递正确', self.calls('B')[0]['prompt'])
         self.assertTrue(any(k == 'live' and v['status'] == 'running' and v.get('answer') for k, v in self.events['A']))
-        self.assertEqual(len(list(self.job().glob('turn-*.json'))), 5)
+        self.assertEqual(len(list(entries(self.job(),'glob','turn-*.json'))), 5)
         time.sleep(1)
         self.assertEqual(len(self.calls('B')), 2, 'No duplicate automatic replay')
 
@@ -93,14 +94,14 @@ class SystemTests(unittest.TestCase):
         self.nodes['A'].command('start', topic='[FAIL] 接口错误', rounds=1)
         until(lambda: self.state() == 'failed')
         self.assertEqual(len(self.calls('B')), 0)
-        self.assertTrue((self.job() / 'A-error.json').exists())
+        self.assertTrue((fs(self.job() / 'A-error.json')).exists())
 
     def start_and_finish(self, role, topic, parent=None):
-        count = len(list((self.shared / 'jobs').iterdir()))
+        count = len(list(entries(self.shared / 'jobs','iterdir')))
         until(lambda: all(not n.active for n in self.nodes.values()))
         until(lambda: all(not read_json(self.shared / 'nodes' / (r + '.json'), {}).get('job_id') for r in ('A', 'B')))
         self.nodes[role].command('start', topic=topic, rounds=1, parent_job_id=parent)
-        until(lambda: len(list((self.shared / 'jobs').iterdir())) == count + 1)
+        until(lambda: len(list(entries(self.shared / 'jobs','iterdir'))) == count + 1)
         path = self.job()
         until(lambda: read_json(path / 'state.json', {}).get('status') == 'completed')
         until(lambda: all(not n.active for n in self.nodes.values()))
@@ -112,7 +113,7 @@ class SystemTests(unittest.TestCase):
         control = read_json(first / 'control.json')
         control['notes'] = ['ONLY-TEST-T03 用户约束']
         atomic_json(first / 'control.json', control)
-        original_turn = (first / 'turn-002-A.json').read_bytes()
+        original_turn = (fs(first / 'turn-002-A.json')).read_bytes()
         for node in self.nodes.values():
             node.stop()
         for node in self.nodes.values():
@@ -132,8 +133,8 @@ class SystemTests(unittest.TestCase):
                 self.assertIn('ONLY-TEST-T03', call['prompt'])
                 self.assertIn('中文传递正确', call['prompt'])
             self.assertNotEqual(self.calls(role)[0]['thread'], calls[0]['thread'])
-        self.assertEqual((self.root / 'A' / 'runs' / second.name / 'context.json').read_bytes(),
-                         (self.root / 'B' / 'runs' / second.name / 'context.json').read_bytes())
+        self.assertEqual((fs(self.root / 'A' / 'runs' / second.name / 'context.json')).read_bytes(),
+                         (fs(self.root / 'B' / 'runs' / second.name / 'context.json')).read_bytes())
         third = self.start_and_finish('A', 'THIRD-CONTINUE-UNIQUE: 汇总阶段结果', second.name)
         context = read_json(third / 'context.json')
         self.assertEqual([d['job_id'] for d in context['discussions']], [first.name, second.name])
@@ -145,7 +146,7 @@ class SystemTests(unittest.TestCase):
         for role in ('A', 'B'):
             self.assertNotIn('FIRST-HISTORY-UNIQUE', self.calls(role)[-1]['prompt'])
         self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')), 12, 'Four discussions, exactly 12 requests, no summary call')
-        self.assertEqual((first / 'turn-002-A.json').read_bytes(), original_turn)
+        self.assertEqual((fs(first / 'turn-002-A.json')).read_bytes(), original_turn)
 
     def test_continuation_missing_history_or_legacy_peer_never_calls_model(self):
         until(lambda: FEATURE in read_json(self.shared / 'nodes' / 'B.json', {}).get('features', []))
@@ -157,7 +158,7 @@ class SystemTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '0.3.2'):
             self.nodes['A'].run_initiator('继续', 1, missing)
         self.assertEqual(len(self.calls('A')) + len(self.calls('B')), 0)
-        self.assertEqual(len(list((self.shared / 'jobs').iterdir())), 0)
+        self.assertEqual(len(list(entries(self.shared / 'jobs','iterdir'))), 0)
 
 
 if __name__ == '__main__':

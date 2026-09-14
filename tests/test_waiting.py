@@ -1,3 +1,4 @@
+from fixture_paths import FixtureTemporaryDirectory
 """Unlimited task waiting, with virtual time and isolated offline integration."""
 import copy
 import json
@@ -126,7 +127,7 @@ class WaitingTests(unittest.TestCase):
         self.assertTrue(any(x['phase'] == 'quiet' and x['event_count'] == 0 for x in seen))
 
     def test_new_meta_has_no_expiry_legacy_values_remain_strict(self):
-        with tempfile.TemporaryDirectory(prefix='agentlink-wait-') as folder:
+        with FixtureTemporaryDirectory(prefix='agentlink-wait-') as folder:
             box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
             meta = box.create('长任务', 1, unlimited=True)
             self.assertIsNone(meta['expires'])
@@ -144,7 +145,7 @@ class WaitingTests(unittest.TestCase):
             self.assertEqual(Settings.load(folder).timeout_seconds, 0)
 
     def test_peer_heartbeat_gap_detected_on_local_monotonic_clock(self):
-        with tempfile.TemporaryDirectory(prefix='agentlink-peer-') as folder, __import__('contextlib').ExitStack() as locks:
+        with FixtureTemporaryDirectory(prefix='agentlink-peer-') as folder, __import__('contextlib').ExitStack() as locks:
             box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
             node = NodeService(Settings(), box.local, lambda *args: None); node.box = box
             peer = {'updated': time.time(), 'instance': 'b'*32, 'status': 'running', 'job_id': 'job'}
@@ -162,7 +163,7 @@ class WaitingTests(unittest.TestCase):
             node._check_peer_wait('job', 'B')
 
     def test_coordinator_waits_past_old_twenty_minute_limit(self):
-        with tempfile.TemporaryDirectory(prefix='agentlink-coordinator-') as folder:
+        with FixtureTemporaryDirectory(prefix='agentlink-coordinator-') as folder:
             box = Mailbox(Path(folder) / 'share', Path(folder) / 'local'); box.connect()
             node = NodeService(Settings(role='A'), box.local, lambda *args: None)
             node.box, node.connected = box, True

@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """T08/T17/T18 deterministic local regression. No external model or SMB."""
 import copy
 import hashlib
@@ -39,7 +40,7 @@ class Fixture:
         call = {'role': role, 'step': step, 'thread': thread, 'attempt': 1,
                 'prompt_sha256': hashlib.sha256(prompt.encode()).hexdigest()}
         self.calls.append(call)
-        with (self.root / 'fixture-requests.jsonl').open('a', encoding='utf-8') as handle:
+        with fs(self.root / 'fixture-requests.jsonl').open('a', encoding='utf-8') as handle:
             handle.write(json.dumps(call) + '\n')
         self.entered.set()
         if self.block and not self.release.wait(15):
@@ -53,8 +54,8 @@ class Fixture:
 class RepairComponentTests(unittest.TestCase):
     def setUp(self):
         self.root = __import__('fixture_paths').output_root() / ('r-' + uuid.uuid4().hex[:10])
-        self.root.mkdir(parents=True)
-        (self.root / 'case.txt').write_text(self.id(), encoding='utf-8')
+        fs(self.root).mkdir(parents=True)
+        (fs(self.root / 'case.txt')).write_text(self.id(), encoding='utf-8')
         self.box = Mailbox(self.root / 'share', self.root / 'B')
         self.box.connect()
         self.events = []
@@ -96,7 +97,7 @@ class RepairComponentTests(unittest.TestCase):
         results = []
         sentinel = self.box.create('历史哨兵', 1)
         self.box.put(sentinel['id'], 'state.json', {'status': 'completed'})
-        original = (self.box.job(sentinel['id']) / 'state.json').read_bytes()
+        original = (fs(self.box.job(sentinel['id']) / 'state.json')).read_bytes()
         for field, value in cases:
             with self.subTest(field=field, value=value):
                 meta = self.ready()
@@ -105,19 +106,19 @@ class RepairComponentTests(unittest.TestCase):
                 else:
                     meta[field] = value
                 self.box.put(meta['id'], 'meta.json', meta)
-                state_before = (self.box.job(meta['id']) / 'state.json').read_bytes()
+                state_before = (fs(self.box.job(meta['id']) / 'state.json')).read_bytes()
                 with self.assertRaises(ValueError) as error:
                     self.node.scan_receiver()
                 self.assertEqual(self.client.calls, [])
-                self.assertEqual(list(self.box.job(meta['id']).glob('*.claim')), [])
+                self.assertEqual(list(entries(self.box.job(meta['id']),'glob','*.claim')), [])
                 self.assertIsNone(self.node.active)
-                self.assertEqual((self.box.job(meta['id']) / 'state.json').read_bytes(), state_before)
-                self.assertEqual((self.box.job(sentinel['id']) / 'state.json').read_bytes(), original)
+                self.assertEqual((fs(self.box.job(meta['id']) / 'state.json')).read_bytes(), state_before)
+                self.assertEqual((fs(self.box.job(sentinel['id']) / 'state.json')).read_bytes(), original)
                 with FileLock(self.box.root / 'discussion.lease'):
                     pass
                 results.append({'field': field, 'input': repr(value), 'requests': 0,
                                 'claims': 0, 'history_unchanged': True, 'error': str(error.exception)})
-        (self.root / 'T18-cases.json').write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding='utf-8')
+        (fs(self.root / 'T18-cases.json')).write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding='utf-8')
 
     def test_T18_request_protocol_and_legal_control(self):
         meta = self.ready()
@@ -132,7 +133,7 @@ class RepairComponentTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.node._receive_step(self.box.job(meta['id']), meta)
                 self.assertEqual(self.client.calls, [])
-                self.assertEqual(list(self.box.job(meta['id']).glob('*.claim')), [])
+                self.assertEqual(list(entries(self.box.job(meta['id']),'glob','*.claim')), [])
         self.box.put(meta['id'], 'request-001-B.json', request)
         self.node._receive_step(self.box.job(meta['id']), meta)
         self.node._receive_step(self.box.job(meta['id']), meta)
@@ -154,26 +155,26 @@ class RepairComponentTests(unittest.TestCase):
         try:
             self.assertTrue(self.client.entered.wait(5))
             self.node._edit_control(meta['id'], 'cancel', '')
-            old_state = (self.box.job(meta['id']) / 'state.json').read_bytes()
+            old_state = (fs(self.box.job(meta['id']) / 'state.json')).read_bytes()
             with self.assertRaises(Cancelled):
                 self.node._state('running', 1)
             if replace_active:
                 newer = self.box.create('新场次', 1, 'B')
                 self.box.put(newer['id'], 'state.json', {'status': 'running', 'index': 0})
                 self.node.active = newer
-                new_state = (self.box.job(newer['id']) / 'state.json').read_bytes()
+                new_state = (fs(self.box.job(newer['id']) / 'state.json')).read_bytes()
             self.client.release.set()
             worker.join(5)
             self.assertFalse(worker.is_alive())
             self.assertEqual(len(errors), 1)
             self.assertIsInstance(errors[0], Cancelled)
             self.assertEqual(len(self.client.calls), 1)
-            self.assertFalse((self.box.job(meta['id']) / 'turn-001-B.json').exists())
-            self.assertEqual((self.box.job(meta['id']) / 'state.json').read_bytes(), old_state)
+            self.assertFalse((fs(self.box.job(meta['id']) / 'turn-001-B.json')).exists())
+            self.assertEqual((fs(self.box.job(meta['id']) / 'state.json')).read_bytes(), old_state)
             if replace_active:
-                self.assertEqual((self.box.job(newer['id']) / 'state.json').read_bytes(), new_state)
-                self.assertFalse((self.box.job(newer['id']) / 'live-B.json').exists())
-            (self.root / 'race-result.json').write_text(json.dumps({
+                self.assertEqual((fs(self.box.job(newer['id']) / 'state.json')).read_bytes(), new_state)
+                self.assertFalse((fs(self.box.job(newer['id']) / 'live-B.json')).exists())
+            (fs(self.root / 'race-result.json')).write_text(json.dumps({
                 'old_job': meta['id'], 'replacement_active': replace_active,
                 'requests': 1, 'old_state_unchanged': True, 'result_rejected': True,
                 'error': str(errors[0])}, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -192,14 +193,14 @@ class RepairComponentTests(unittest.TestCase):
         self.node.active = meta
         self.node._state('completed')
         path = self.box.job(meta['id']) / 'state.json'
-        before = path.read_bytes()
+        before = fs(path).read_bytes()
         for kind in ('cancel', 'resume', 'pause'):
             self.node._edit_control(meta['id'], kind, '')
         self.node._failed(RuntimeError('late failure'))
         with self.assertRaises(Cancelled):
             self.node._state('failed')
-        self.assertEqual(path.read_bytes(), before)
-        self.assertFalse((self.box.job(meta['id']) / 'B-error.json').exists())
+        self.assertEqual(fs(path).read_bytes(), before)
+        self.assertFalse((fs(self.box.job(meta['id']) / 'B-error.json')).exists())
         self.assertEqual(self.client.calls, [])
 
 
@@ -228,7 +229,7 @@ class RepairServiceTests(unittest.TestCase):
         until(lambda: node.connected and all(n.liveness.status()=="ready" for n in self.nodes.values()))
         node.command('start', topic='完成后重复编号', rounds=1, request_id='stable-req')
         until(lambda: not node.start_pending)
-        self.assertEqual(len(list((self.shared / 'jobs').iterdir())), 1)
+        self.assertEqual(len(list(entries(self.shared / 'jobs','iterdir'))), 1)
         self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')), 1)
         until(lambda: any(k == 'error' and '已有记录' in v['message'] for k, v in self.events['A']))
 
@@ -246,7 +247,7 @@ class RepairServiceTests(unittest.TestCase):
             worker.join(5)
         until(lambda: self.state() == 'completed')
         until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
-        self.assertEqual(len(list((self.shared / 'jobs').iterdir())), 1)
+        self.assertEqual(len(list(entries(self.shared / 'jobs','iterdir'))), 1)
         self.assertEqual(sum(len(self.calls(r)) for r in ('A', 'B')), 3)
         self.assertTrue(any(k == 'error' and ('冲突' in v['message'] or '已有讨论' in v['message'] or '只有 A' in v['message'])
                             for values in self.events.values() for k, v in values))
@@ -286,7 +287,7 @@ class RepairServiceTests(unittest.TestCase):
             a.command('cancel')
             until(lambda: read_json(first / 'state.json', {}).get('status') == 'cancelled')
             until(lambda: not a.active and not a.start_pending)
-            before = (first / 'state.json').read_bytes()
+            before = (fs(first / 'state.json')).read_bytes()
             event_start = len(self.events['A'])
             a.command('start', topic='旧执行者未隔离，必须拒绝', rounds=1)
             until(lambda:any(k=='error' and '执行归属' in v['message'] for k,v in self.events['A'][event_start:]))
@@ -299,9 +300,9 @@ class RepairServiceTests(unittest.TestCase):
             release.set()
             until(lambda: read_json(second / 'state.json', {}).get('status') == 'completed')
             until(lambda: all(not n.active for n in self.nodes.values()))
-            self.assertEqual((first / 'state.json').read_bytes(), before)
-            self.assertFalse((first / 'turn-001-B.json').exists())
-            self.assertEqual(len(list(second.glob('turn-*.json'))), 3)
+            self.assertEqual((fs(first / 'state.json')).read_bytes(), before)
+            self.assertFalse((fs(first / 'turn-001-B.json')).exists())
+            self.assertEqual(len(list(entries(second,'glob','turn-*.json'))), 3)
             self.assertEqual([len(self.calls(r)) for r in ('A', 'B')], [3, 2])
         finally:
             isolate.set()

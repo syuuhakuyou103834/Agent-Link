@@ -88,6 +88,7 @@ def main():
     (RUNTIME / 'python313._pth').write_text('python313.zip\nDLLs\nsite-packages\n..\n', encoding='ascii')
     copy(ROOT / 'main.py', PORTABLE / 'main.py')
     copy(ROOT / 'packaging' / 'Repair-CodexRuntime.cmd', PORTABLE / 'Repair-CodexRuntime.cmd')
+    copy(ROOT / 'packaging' / 'Verify-Evidence.cmd', PORTABLE / 'Verify-Evidence.cmd')
     shutil.copytree(ROOT / 'app', PORTABLE / 'app', dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__'))
     copy(ROOT / 'README.md', PORTABLE / 'README.md')
     copy(ROOT / ('DEBUG-' + VERSION + '.md'), PORTABLE / ('DEBUG-' + VERSION + '.md'))

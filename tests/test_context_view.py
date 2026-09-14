@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 """Bounded send views, immutable evidence and exact pre-send limits; no models."""
 import copy
 import json
@@ -30,7 +32,7 @@ def sample():
 
 class ContextViewTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(prefix='al18-',dir=__import__('app.storage',fromlist=['io_path']).io_path(tempfile.gettempdir()));self.addCleanup(self.tmp.cleanup)
+        self.tmp=FixtureTemporaryDirectory(prefix='al18-',dir=__import__('app.storage',fromlist=['io_path']).io_path(tempfile.gettempdir()));self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)
 
     def test_large_tools_are_files_and_original_is_unchanged(self):
@@ -83,7 +85,7 @@ class ContextViewTests(unittest.TestCase):
                 with self.assertRaises(PromptBudgetError) as cm:prepare(value,self.root/str(slot))
                 self.assertFalse(cm.exception.details['request_sent'])
                 self.assertGreater(cm.exception.details['chars'],280000)
-                self.assertTrue(list((self.root/str(slot)).glob('*/index.json')))
+                self.assertTrue(list(entries(self.root/str(slot),'glob','*/index.json')))
 
     def test_character_and_json_byte_boundaries(self):
         check_prompt('x'*280000)

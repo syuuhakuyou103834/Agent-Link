@@ -28,9 +28,9 @@ from .storage import (Mailbox, FileLock, Settings, atomic_json, read_json, now,
                       turn_title, report_text, import_legacy, JOB_PATTERN, TERMINAL_STATES, LONG_TASK_FEATURE)
 
 from .liveness import PeerLiveness, FEATURE as LIVENESS_FEATURE, valid_challenge
-from .diagnostics import RuntimeJournal
+from .diagnostics import RuntimeJournal, DetailedErrors
 
-SAFETY_FEATURE = 'agentlink-execution-lease-v7'
+SAFETY_FEATURE = 'agentlink-execution-lease-v8'
 
 
 class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
@@ -73,6 +73,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         self.peer_record = {}
         self.thread = threading.Thread(target=self.run, name="AgentLink-node", daemon=True)
         self.diagnostics = RuntimeJournal(self.data / 'logs')
+        self.detail_errors = DetailedErrors(self.data/'logs',lambda health:self.emit('detail_log_health',health))
         self.last_diagnostic = 0.
 
     def start(self):
@@ -165,12 +166,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
         record = {'time': now(), 'role': self.settings.role, 'job_id': self.active['id'] if self.active else None,
                   'type': type(error).__name__, 'message': str(error), 'errno': getattr(error, 'errno', None),
                   'winerror': getattr(error, 'winerror', None), 'traceback': traceback.format_exc()}
-        try:
-            folder = self.data / 'logs'; io_path(folder).mkdir(parents=True, exist_ok=True)
-            with (folder / 'agentlink-errors.jsonl').open('a', encoding='utf-8') as handle:
-                handle.write(json.dumps(record, ensure_ascii=False) + '\n')
-        except OSError:
-            pass
+        self.detail_errors.submit(record)
         self.note(message)
         kind = 'storage_warning' if recoverable and isinstance(error, OSError) else 'error'
         if kind == 'storage_warning':
@@ -213,7 +209,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
             peer = read_json(self.box.root / 'nodes' / (self.peer_role + '.json'), {}) or {}
         features = peer.get('features') if isinstance(peer, dict) else None
         if not isinstance(features, list) or SAFETY_FEATURE not in features or LIVENESS_FEATURE not in features:
-            raise ValueError('对端协议不兼容或尚未连接：执行清理与消息提交协议需要双方升级至 0.3.22。'
+            raise ValueError('对端协议不兼容或尚未连接：执行清理与消息提交协议需要双方升级至 0.3.23。'
                              '未创建新场次或启动模型，请更新双方并连接。')
         instance = peer.get('instance')
         if expected_instance is not None and instance != expected_instance:
@@ -392,22 +388,16 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                               recovery_basis='original guarded host exited; original child absent'))
         self._trace('cleanup_reconciled',reason_code='guarded_host_exited')
 
-    def _cache_received_result(self, job, step, result):
-        """Preserve the returned payload before cleanup or shared publication."""
-        from .context_view import digest
-        path=self.data/'received-results'/job/step/'result.json'
-        record=dict(schema=1,job_id=job,step=step,role=self.settings.role,instance=self.instance,
-            host=socket.gethostname(),received_at=now(),result=result,sha256=digest(result),
-            verification='raw result received; not a validated/published turn')
-        existing=read_json(path)
-        if existing is None and io_path(path).exists():
-            raise ValueError('已有本机返回缓存损坏，拒绝覆盖')
-        if existing is not None:
-            if not isinstance(existing,dict) or existing.get('sha256')!=record['sha256'] or existing.get('result')!=result:
-                raise ValueError('同一步骤已有不同的本机返回结果，拒绝覆盖')
-        else:atomic_json(path,record)
+    def _cache_received_result(self, job, step, result, context_probe=None):
+        from .received_results import save,attest
+        path=save(self.data,job,step,self.settings.role,self.instance,result)
+        if context_probe is not None:attest(self.data,job,step,self.settings.role,context_probe())
         self._trace('result_cached',step=step,request_state='result_received')
         return path
+
+    def _load_received_result(self, job, step, required=False):
+        from .received_results import load
+        return load(self.data,job,step,self.settings.role,required)
 
     def _heartbeat(self, force=False):
         if not self.box or (not self.connected and not force):
@@ -1142,7 +1132,7 @@ class NodeService(UnifiedWorkflow, ReviewWorkflow, NodeInput):
                 if pending.get('_dispatch'):
                     pending['_dispatch'].close()
             try:self.disconnect()
-            finally:self.diagnostics.close()
+            finally:self.diagnostics.close();self.detail_errors.close()
 
     def stop(self):
         self.shutdown.set()

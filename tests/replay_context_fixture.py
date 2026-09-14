@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Replay a supplied private conversation through the real chat builder, zero model calls.
 
 Usage: python tests/replay_context_fixture.py frozen-conversation.json output-directory
@@ -12,8 +13,8 @@ from app.storage import Settings,Mailbox,atomic_json
 from app.context import check_prompt
 
 def main():
-    fixture=Path(sys.argv[1]);out=Path(sys.argv[2]);out.mkdir(parents=True,exist_ok=False)
-    raw=fixture.read_bytes();original=json.loads(raw)
+    fixture=Path(sys.argv[1]);out=Path(sys.argv[2]);fs(out).mkdir(parents=True,exist_ok=False)
+    raw=fs(fixture).read_bytes();original=json.loads(raw)
     old=json.dumps(dict(messages=original['messages'],confirmed=original['confirmed'],
                        completed_rounds=original['completed_rounds'],phase=original['phase']),ensure_ascii=False)
     node=NodeService(Settings(role='B',shared_root=str(out/'share')),out/'B',lambda *a:None)
@@ -36,7 +37,7 @@ def main():
     current=node.conversations.get(c['id'])
     assert len(calls)==1 and msg['id'] not in current['pending'],current.get('error')
     assert current['completed_rounds']==original['completed_rounds']
-    assert fixture.read_bytes()==raw
+    assert fs(fixture).read_bytes()==raw
     view,_=json.JSONDecoder().raw_decode(calls[0].split('\n',1)[1])
     assert [m['text'] for m in view['messages']]==[m['text'] for m in original['messages']]
     assert all('turn' not in m for m in view['messages'])
@@ -48,9 +49,9 @@ def main():
         new_full_chat_wire_bytes=len(json.dumps(calls[0],ensure_ascii=False).encode('utf-8')),
         messages=len(view['messages']),original_tools=original_tools,all_message_texts_preserved=True,
         pending_target='B',pending_original_processed=True,completed_rounds=original['completed_rounds'],
-        original_unchanged=True,local_evidence_index_created=index.exists(),model_requests=0,
+        original_unchanged=True,local_evidence_index_created=fs(index).exists(),model_requests=0,
         scope_note='Actual chat builder with capture client; not independent B/SMB/model acceptance')
-    (out/'metrics.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+    (fs(out/'metrics.json')).write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(result,ensure_ascii=False))
 
 if __name__=='__main__':main()

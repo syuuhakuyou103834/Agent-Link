@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 """Cross-version migration and restored UI behavior with preserved safety gates."""
 import json
 from pathlib import Path
@@ -26,12 +28,12 @@ class UpgradeTests(unittest.TestCase):
         cls.app = W.QApplication.instance() or W.QApplication([])
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='agentlink-upgrade-')
+        self.temp = FixtureTemporaryDirectory(prefix='agentlink-upgrade-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
     def test_actual_034_settings_and_039_legacy_values_migrate(self):
-        legacy = json.loads((ROOT/'tests/fixtures/034-settings.json').read_text(encoding='utf-8'))
+        legacy = json.loads((fs(ROOT/'tests/fixtures/034-settings.json')).read_text(encoding='utf-8'))
         self.assertEqual(legacy['timeout_seconds'], 0)
         for timeout in (legacy['timeout_seconds'], 900, 3600):
             with self.subTest(timeout=timeout):
@@ -48,7 +50,7 @@ class UpgradeTests(unittest.TestCase):
                 dialog.close()
 
     def test_protocol2_and_protocol1_history_continue_without_mutation(self):
-        fixture = json.loads((ROOT/'tests/fixtures/034-history.json').read_text(encoding='utf-8'))
+        fixture = json.loads((fs(ROOT/'tests/fixtures/034-history.json')).read_text(encoding='utf-8'))
         for protocol in (1,2):
             with self.subTest(protocol=protocol):
                 box = Mailbox(self.root/str(protocol)/'share', self.root/str(protocol)/'local')
@@ -58,16 +60,16 @@ class UpgradeTests(unittest.TestCase):
                     meta['expires'] = 1  # completed historical jobs remain usable after expiry
                     meta.pop('wait_policy')
                 job_id = meta['id']
-                box.job(job_id).mkdir()
+                fs(box.job(job_id)).mkdir()
                 for name, data in [('meta',meta), ('control',fixture['control']), ('state',fixture['state'])]:
                     box.put(job_id, name+'.json', data)
                 for turn in fixture['turns']:
                     box.put(job_id, 'turn-'+turn['step']+'.json', turn)
-                before = (box.job(job_id)/'meta.json').read_bytes()
+                before = (fs(box.job(job_id)/'meta.json')).read_bytes()
                 context = prepare_context(box,job_id)
                 self.assertEqual(context['discussions'][0]['turns'][-1]['answer'], 'LEGACY-034-ANSWER-2')
                 self.assertEqual(context['discussions'][0]['notes'], ['LEGACY-NOTE'])
-                self.assertEqual((box.job(job_id)/'meta.json').read_bytes(), before)
+                self.assertEqual((fs(box.job(job_id)/'meta.json')).read_bytes(), before)
 
     def test_unfinished_export_and_status_label_restored(self):
         window = MainWindow(Settings(auto_connect=False),self.root/'gui',start_service=False)
@@ -79,7 +81,8 @@ class UpgradeTests(unittest.TestCase):
         target=self.root/'export.txt'
         with patch.object(W.QFileDialog,'getSaveFileName',return_value=(str(target),'')):
             window.export_report()
-        text=target.read_text(encoding='utf-8-sig')
+        until(lambda:fs(target).exists(),5)
+        text=fs(target).read_text(encoding='utf-8-sig')
         self.assertIn('未完成输出',text)
         self.assertIn('PARTIAL-ANSWER',text)
         self.assertIn('TASK-PARTIAL',text)
@@ -131,8 +134,8 @@ class UpgradeServiceTests(unittest.TestCase):
         atomic_json(self.shared/'nodes/B.json',{'role':'B','features':['agentlink-execution-lease-v3'],
                                              'updated':__import__('time').time(),'status':'idle'})
         self.nodes['A'].command('start',topic='reject old peer',rounds=1)
-        until(lambda: any(k=='error' and '0.3.22' in v['message'] for k,v in self.events['A']))
-        self.assertEqual(len(list((self.shared/'jobs').iterdir())),0)
+        until(lambda: any(k=='error' and '0.3.23' in v['message'] for k,v in self.events['A']))
+        self.assertEqual(len(list(entries(self.shared/'jobs','iterdir'))),0)
         self.assertEqual(self.calls('A')+self.calls('B'),[])
 
 if __name__=='__main__':

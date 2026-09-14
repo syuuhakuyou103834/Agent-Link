@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 import json
 from pathlib import Path
 import sys
@@ -14,8 +15,8 @@ class CodeWorkflowTests(SystemTests):
     # Use the same two-process mock harness without re-running inherited text cases here.
     def setUp(self):
         super().setUp()
-        self.project = self.root / 'official'; self.project.mkdir()
-        (self.project / 'main.py').write_text('print("untracked 中文")', encoding='utf-8')
+        self.project = self.root / 'official'; fs(self.project).mkdir()
+        (fs(self.project / 'main.py')).write_text('print("untracked 中文")', encoding='utf-8')
         self.pid = uuid.uuid4().hex
         store = Projects(self.root / 'A')
         store.save('测试项目', str(self.project), 'A', self.pid)

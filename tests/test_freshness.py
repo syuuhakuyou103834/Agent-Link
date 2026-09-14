@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 import json
 from pathlib import Path
 import sys
@@ -26,8 +27,8 @@ class FreshnessTests(RepairComponentTests):
         self.node._failed(error.exception)
         self.assertEqual(len(self.client.calls), 1)
         self.assertEqual(self.box.get(meta['id'], 'state.json')['status'], 'failed')
-        self.assertFalse((self.box.job(meta['id']) / 'turn-001-B.json').exists())
-        (self.root / 'post-gate-exit.json').write_text(json.dumps({
+        self.assertFalse((fs(self.box.job(meta['id']) / 'turn-001-B.json')).exists())
+        (fs(self.root / 'post-gate-exit.json')).write_text(json.dumps({
             'job_id':meta['id'], 'requests':1, 'automatic_retry':False,
             'window':'after final peer check and client request acceptance', 'status':'failed'}), encoding='utf-8')
 
@@ -42,7 +43,7 @@ class FreshnessTests(RepairComponentTests):
         atomic_json(path, dict(peer, instance='c'*32))
         self.node.run_initiator(args['topic'], args['rounds'], _dispatch=args['_dispatch'],
                                 _peer_instance=args['_peer_instance'])
-        self.assertEqual(len(list((self.box.root / 'jobs').iterdir())), 1)
+        self.assertEqual(len(list(entries(self.box.root / 'jobs','iterdir'))), 1)
         self.assertEqual(self.client.calls, [])
         self.assertTrue(any(k=='activity' and '实例' in v['text'] for k,v in self.events))
 
@@ -91,7 +92,7 @@ class FreshnessTests(RepairComponentTests):
         with self.assertRaises(Exception):
             self.node._perform(1, 'exit after compatibility check')
         self.assertEqual(self.client.calls, [])
-        self.assertFalse((self.box.job(meta['id']) / 'turn-001-B.json').exists())
+        self.assertFalse((fs(self.box.job(meta['id']) / 'turn-001-B.json')).exists())
 
     def test_T18_restart_between_gate_and_send_does_not_rebind_old_job(self):
         meta = self.ready()

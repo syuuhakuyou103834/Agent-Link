@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Offline Qt rendering of recoverable peer failures; explicit local share only."""
 import os,sys,unittest,uuid
 from pathlib import Path
@@ -13,7 +14,7 @@ class PeerUi(unittest.TestCase):
         app=W.QApplication.instance() or W.QApplication([])
         for name in ('msyh.ttc','msyhbd.ttc'):
             QtGui.QFontDatabase.addApplicationFont('C:/Windows/Fonts/'+name)
-        root=__import__('fixture_paths').output_root()/('ui019-'+uuid.uuid4().hex);root.mkdir(parents=True)
+        root=__import__('fixture_paths').output_root()/('ui019-'+uuid.uuid4().hex);fs(root).mkdir(parents=True)
         w=MainWindow(Settings(shared_root=str(root/'share'),auto_connect=False),root,start_service=False)
         try:
             c=w.service.conversations.create('A 初审已保存；从 B 的源码接收继续')

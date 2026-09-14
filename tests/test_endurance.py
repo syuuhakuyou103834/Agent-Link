@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Fixed T19 baseline: 10 warmup + 100 local two-service/mock-process jobs."""
 import ctypes
 from ctypes import wintypes
@@ -71,9 +72,9 @@ try:
             path = root / (r + '-calls.jsonl')
             counts.extend(json.loads(line) for line in fs(path).read_text(encoding='utf-8').splitlines())
         assert len(counts) == (index + 1) * 3
-        job = max(jobs, key=lambda p: p.stat().st_ctime_ns)
+        job = max(jobs, key=lambda p: fs(p).stat().st_ctime_ns)
         assert read_json(job / 'state.json')['status'] == 'completed'
-        turns = [read_json(p) for p in sorted(job.glob('turn-*.json'))]
+        turns = [read_json(p) for p in sorted(entries(job,'glob','turn-*.json'))]
         assert len(turns) == 3 and [t['role'] for t in turns] == [role, 'B' if role == 'A' else 'A', role]
         assert all(t['job_id'] == job.name for t in turns)
         processes = [n.client.process for n in nodes.values()]

@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 import copy,json,sys,tempfile,unittest,uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,20 +10,20 @@ from app.conversation import validate_brief,user_directories,round_count,fingerp
 
 class Guards(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
+        self.temp=FixtureTemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
         self.node=NodeService(Settings(shared_root=str(self.root/'share')),self.root/'A',lambda *a:None)
         self.node.box=Mailbox(self.root/'share',self.root/'A');self.node.box.connect();self.node.connected=True
         self.node.client=SimpleNamespace(cleanup_pending=False,process=None)
         self.brief=dict(goal='限定问题',directory='',permission='discuss',allowed_changes='无',acceptance=['核查回答'],review_focus='核查',round_limit=3)
 
     def test_unmentioned_directory_rejected(self):
-        p=self.root/'project';p.mkdir()
+        p=self.root/'project';fs(p).mkdir()
         with self.assertRaisesRegex(ValueError,'未由 A'):
             validate_brief(dict(self.brief,directory=str(p),permission='edit'),[])
         self.assertEqual(validate_brief(dict(self.brief,directory=str(p),permission='edit'),[str(p)])['directory'],str(p))
 
     def test_only_A_user_can_nominate_directory(self):
-        p=self.root/'项目 with space';p.mkdir()
+        p=self.root/'项目 with space';fs(p).mkdir()
         messages=[dict(speaker='B',origin='B',text=str(p)),dict(speaker='user',origin='B',text=str(p))]
         self.assertEqual(user_directories(messages),[])
         messages.append(dict(speaker='user',origin='A',text='目录：`'+str(p)+'`'))
@@ -69,8 +71,8 @@ class Guards(unittest.TestCase):
 
     def test_noop_read_does_not_republish(self):
         cid=self.node.conversations.create('任务')['id'];p=self.node.conversations.path(cid)
-        self.node.conversations.get(cid);stamp=p.stat().st_mtime_ns
+        self.node.conversations.get(cid);stamp=fs(p).stat().st_mtime_ns
         with self.node.conversations.edit(cid):pass
-        self.assertEqual(p.stat().st_mtime_ns,stamp)
+        self.assertEqual(fs(p).stat().st_mtime_ns,stamp)
 
 if __name__=='__main__':unittest.main(verbosity=2)

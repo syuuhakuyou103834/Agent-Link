@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """A small mailbox record must not allocate its full 8 MiB size limit."""
 import json
 from pathlib import Path
@@ -20,8 +21,8 @@ class ReadMemoryTests(unittest.TestCase):
             current, peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
-        (root / 'allocation.json').write_text(json.dumps({'current': current, 'peak': peak,
-            'file_bytes': path.stat().st_size, 'limit': 1024*1024}), encoding='utf-8')
+        (fs(root / 'allocation.json')).write_text(json.dumps({'current': current, 'peak': peak,
+            'file_bytes': fs(path).stat().st_size, 'limit': 1024*1024}), encoding='utf-8')
         self.assertLess(peak, 1024*1024, 'Tiny record allocated a near-8-MiB read buffer')
 
     def test_oversized_record_still_rejected(self):

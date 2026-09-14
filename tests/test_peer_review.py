@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """B review gaps. Direct module execution avoids inherited duplicate discovery."""
 import json
 from pathlib import Path
@@ -40,14 +41,14 @@ class ReviewComponents(RepairComponentTests):
         def publish(path, value):
             original(path, value)
             if Path(path) == self.box.job(meta['id']) / 'turn-001-B.json':
-                published.append(Path(path).read_bytes())
+                published.append(fs(Path(path)).read_bytes())
                 raise OSError('injected acknowledgement loss after atomic publication')
         with patch.object(storage, 'atomic_json', side_effect=publish):
             with self.assertRaises(OSError) as error:
                 self.node._perform(1, 'publish then lose confirmation')
             self.node._failed(error.exception)
         self.assertEqual(len(published), 1)
-        self.assertEqual((self.box.job(meta['id']) / 'turn-001-B.json').read_bytes(), published[0])
+        self.assertEqual((fs(self.box.job(meta['id']) / 'turn-001-B.json')).read_bytes(), published[0])
         self.node.active = None
         self.node.scan_receiver()
         self.assertEqual(len(self.client.calls), 1)
@@ -73,21 +74,21 @@ class ReviewComponents(RepairComponentTests):
                 peer = self.node.peer_role
                 old = self.box.create('old peer job', 1, peer)
                 self.box.put(old['id'], 'state.json', {'status': 'completed'})
-                original = (self.box.job(old['id']) / 'state.json').read_bytes()
+                original = (fs(self.box.job(old['id']) / 'state.json')).read_bytes()
                 heartbeat = {'version': '0.3.4', 'features': ['discussion-context-v1'],
                              'updated': time.time(), 'job_id': old['id'], 'role': peer}
                 atomic_json(self.box.root / 'nodes' / (peer + '.json'), heartbeat)
                 self.node._admit_start({'request_id': 'version-' + local, 'topic': 'reject', 'rounds': 1})
                 self.assertTrue(self.node.commands.empty())
-                self.assertFalse((self.box.root / 'start-requests' / ('version-' + local + '.json')).exists())
-                self.assertEqual((self.box.job(old['id']) / 'state.json').read_bytes(), original)
+                self.assertFalse((fs(self.box.root / 'start-requests' / ('version-' + local + '.json'))).exists())
+                self.assertEqual((fs(self.box.job(old['id']) / 'state.json')).read_bytes(), original)
                 # Receiver rejects before active/claim/history mutation as well.
                 self.box.put(old['id'], 'state.json', {'status': 'waiting_peer', 'index': 1})
-                before = (self.box.job(old['id']) / 'state.json').read_bytes()
+                before = (fs(self.box.job(old['id']) / 'state.json')).read_bytes()
                 with self.assertRaisesRegex(ValueError, '兼容'):
                     self.node.scan_receiver()
-                self.assertEqual((self.box.job(old['id']) / 'state.json').read_bytes(), before)
-                self.assertEqual(list(self.box.job(old['id']).glob('*.claim')), [])
+                self.assertEqual((fs(self.box.job(old['id']) / 'state.json')).read_bytes(), before)
+                self.assertEqual(list(entries(self.box.job(old['id']),'glob','*.claim')), [])
                 self.assertEqual(self.client.calls, [])
                 self.box.put(old['id'], 'state.json', {'status': 'cancelled'})
 
@@ -144,7 +145,7 @@ class ReviewServices(SystemTests):
             a.command('cancel')
             until(lambda: read_json(old / 'state.json', {}).get('status') == 'cancelled')
             until(lambda: not a.active and not a.start_pending)
-            before = (old / 'state.json').read_bytes()
+            before = (fs(old / 'state.json')).read_bytes()
             event_start = len(self.events['A'])
             a.command('start', topic='must reject before executor isolation', rounds=1)
             until(lambda:any(k=='error' and '执行归属' in v['message'] for k,v in self.events['A'][event_start:]))
@@ -157,9 +158,9 @@ class ReviewServices(SystemTests):
             release.set()
             until(lambda: read_json(new / 'state.json', {}).get('status') == 'completed')
             until(lambda: all(not n.active for n in self.nodes.values()))
-            self.assertEqual((old / 'state.json').read_bytes(), before)
-            self.assertFalse((new / 'B-error.json').exists())
-            self.assertFalse((old / 'turn-001-B.json').exists())
+            self.assertEqual((fs(old / 'state.json')).read_bytes(), before)
+            self.assertFalse((fs(new / 'B-error.json')).exists())
+            self.assertFalse((fs(old / 'turn-001-B.json')).exists())
             self.assertEqual([len(self.calls(r)) for r in ('A','B')], [3,2])
         finally:
             isolate.set()

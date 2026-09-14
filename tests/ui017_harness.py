@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Qt integration through actual clicks: single input, consent, timeline, B followup."""
 import os,json,sys,time,uuid
 from pathlib import Path
@@ -11,7 +12,7 @@ from app.storage import Settings
 def run(code=False):
     app=W.QApplication.instance() or W.QApplication([])
     for name in ('msyh.ttc','msyhbd.ttc'):QtGui.QFontDatabase.addApplicationFont('C:/Windows/Fonts/'+name)
-    root=__import__('fixture_paths').output_root()/('ui017-'+uuid.uuid4().hex);root.mkdir(parents=True)
+    root=__import__('fixture_paths').output_root()/('ui017-'+uuid.uuid4().hex);fs(root).mkdir(parents=True)
     windows={}
     def wait(predicate,timeout=50):
         end=time.monotonic()+timeout
@@ -33,7 +34,7 @@ def run(code=False):
         assert not hasattr(a,'mode') and not hasattr(a,'project_select') and not hasattr(a,'rounds')
         assert not hasattr(a,'node_message')
         if code:
-            project=root/'source-project';project.mkdir();(project/'main.py').write_text('print(1)')
+            project=root/'source-project';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
             topic='只读审查这个目录\n'+str(project)
         else:topic='讨论中文 Unicode 问题'
         send(a,topic)
@@ -57,19 +58,19 @@ def run(code=False):
         assert not a.tabs.isVisible();a.toggle_details();assert a.tabs.isVisible()
         assert '澄清/补充请求尝试' in a.project_view.toPlainText()
         if code:assert '源码快照' in a.project_view.toPlainText()
-        (root/'export.md').write_text(a.report(),encoding='utf-8');assert topic in (root/'export.md').read_text(encoding='utf-8')
-        calls_before=len((root/'A-calls.jsonl').read_text(encoding='utf-8').splitlines())
+        (fs(root/'export.md')).write_text(a.report(),encoding='utf-8');assert topic in (fs(root/'export.md')).read_text(encoding='utf-8')
+        calls_before=len((fs(root/'A-calls.jsonl')).read_text(encoding='utf-8').splitlines())
         send(b,'[RELAY] 记录后续建议')
         wait(lambda:any(m['kind']=='relay' for m in b.conversation['messages']))
         assert b.conversation['completed_rounds']==1
-        assert len((root/'A-calls.jsonl').read_text(encoding='utf-8').splitlines())==calls_before
+        assert len((fs(root/'A-calls.jsonl')).read_text(encoding='utf-8').splitlines())==calls_before
         dialog=SettingsDialog(a.settings);assert dialog.result_settings().sandbox=='read-only';dialog.close()
         b.receive('storage_warning',{'message':'file unavailable'});assert not b.start_button.isEnabled()
         b.receive('storage_recovered',{});assert not b.notice.isVisible()
         b.receive('error',{'message':'model error'});b.receive('storage_recovered',{});assert b.notice.isVisible()
         a.grab().save(str(root/'conversation.png'))
         old=a.conversation;a.new_discussion();a.receive('conversation',old);assert a.conversation is None
-        (root/'result.txt').write_text('PASS: '+('code snapshot' if code else 'text')+' Qt single timeline, explicit start, A-only, B followup, counts, details, export, errors, stale selection\n')
+        (fs(root/'result.txt')).write_text('PASS: '+('code snapshot' if code else 'text')+' Qt single timeline, explicit start, A-only, B followup, counts, details, export, errors, stale selection\n')
         print(root)
     finally:
         for w in windows.values():w.close()

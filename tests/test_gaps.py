@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Additional local fault/ordering regressions; never connects to real models."""
 import sys
 from pathlib import Path
@@ -53,9 +54,9 @@ class GapTests(RepairComponentTests):
         newer = self.box.create('new', 1, 'B')
         self.box.put(newer['id'], 'state.json', {'status': 'running'})
         self.node.active = newer
-        before = (self.box.job(newer['id']) / 'control.json').read_bytes()
+        before = (fs(self.box.job(newer['id']) / 'control.json')).read_bytes()
         self.node._drain_controls()
-        self.assertEqual((self.box.job(newer['id']) / 'control.json').read_bytes(), before)
+        self.assertEqual((fs(self.box.job(newer['id']) / 'control.json')).read_bytes(), before)
         self.assertEqual(self.box.get(old['id'], 'state.json')['status'], 'cancelled')
 
     def test_T11_claim_without_result_reports_uncertainty_zero_resend(self):
@@ -70,7 +71,7 @@ class GapTests(RepairComponentTests):
         meta = self.ready()
         self.node.active = meta
         path = self.box.job(meta['id']) / 'request-001-B.json'
-        path.rename(path.with_name('request-003-B.json'))
+        fs(path).rename(fs(path.with_name('request-003-B.json')))
         with self.assertRaises(ValueError):
             self.node._receive_step(self.box.job(meta['id']), meta)
         self.assertEqual(self.client.calls, [])

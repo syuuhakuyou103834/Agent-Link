@@ -372,6 +372,11 @@ class UnifiedWorkflow:
             '如用户要求只讨论，permission=discuss；只读源码审查用 review；明确要求实现或修复用 edit。'
             '\nA 可读取的用户目录：' + json.dumps(user_directories(value['messages']), ensure_ascii=False))
         context_receipt = self._check_context_prompt(value, prompt, '节点 ' + role + ' 用户对话')
+        prior_result=None
+        previous=next((a for a in reversed(value['attempts']) if a.get('role')==role),None)
+        if (previous and previous.get('status')!='completed' and control_word(msg['text']) in RESUME_WORDS):
+            if previous.get('host')!=socket.gethostname():raise ValueError('原会话不属于当前电脑')
+            prior_result=self._load_received_result(identifier,'chat-'+previous['id'],previous.get('status')=='received')
         attempt_id = uuid.uuid4().hex
         self.execution_lock = FileLock(self.box.root / 'execution.lease').acquire()
         self.chat_active = identifier
@@ -381,16 +386,21 @@ class UnifiedWorkflow:
         try:
             with self.conversations.edit(identifier) as current:
                 current['attempts'].append(attempt)
-            self.client.start(); self.client.pump = self._unified_pump
-            prior = next((a for a in reversed(value['attempts']) if a.get('role') == role
-                          and a.get('status') == 'interrupted' and a.get('thread_id') and a.get('host') == socket.gethostname()), None)
-            thread = (self.client.scoped_thread(settings, cwd, instructions, resume_thread=prior['thread_id'])
-                      if prior and control_word(msg['text']) in RESUME_WORDS else self.client.new_thread(settings, cwd, instructions))
-            attempt.update(thread_id=thread, status='send_pending')
-            self._save_chat_attempt(identifier, attempt)
-            result = self.client.run_turn(thread, prompt, role, 'chat-' + attempt_id, settings,
-                lambda v: self._chat_stream(identifier, v), self._unified_pump)
-            self._cache_received_result(identifier,'chat-'+attempt_id,result)
+            if prior_result is not None:
+                self.client.close()
+                result=copy.deepcopy(prior_result['result']);thread=previous.get('thread_id')
+                attempt.update(thread_id=thread,reused_from=previous['id'],new_model_requests=0)
+            else:
+                self.client.start(); self.client.pump = self._unified_pump
+                prior = next((a for a in reversed(value['attempts']) if a.get('role') == role
+                              and a.get('status') == 'interrupted' and a.get('thread_id') and a.get('host') == socket.gethostname()), None)
+                thread = (self.client.scoped_thread(settings, cwd, instructions, resume_thread=prior['thread_id'])
+                          if prior and control_word(msg['text']) in RESUME_WORDS else self.client.new_thread(settings, cwd, instructions))
+                attempt.update(thread_id=thread, status='send_pending')
+                self._save_chat_attempt(identifier, attempt)
+                result = self.client.run_turn(thread, prompt, role, 'chat-' + attempt_id, settings,
+                    lambda v: self._chat_stream(identifier, v), self._unified_pump)
+                self._cache_received_result(identifier,'chat-'+attempt_id,result)
             attempt.update(status='received', result=result, updated=now())
             self._save_chat_attempt(identifier, attempt)
             parsed = json.loads(result['answer'])
@@ -404,34 +414,40 @@ class UnifiedWorkflow:
                 allowed += [value['confirmed']['directory']]
             brief = validate_brief(parsed['brief'], allowed, parsed['ready'])
             with self.conversations.edit(identifier) as current:
-                if current['phase'] == 'cancelled':
-                    return
-                append_message(current, role, parsed['message'], 'clarification' if role == 'A' else 'supplement',
-                               thread_id=thread, attempt=attempt_id)
-                current.pop('live', None)
-                current['pending'] = [i for i in current['pending'] if i != msg['id']]
-                action = parsed['action']
-                if action == 'conflict':
-                    current['phase'] = 'conflict'
-                    append_message(current, 'system', '检测到要求冲突，后续步骤暂停；请在 A 端明确裁决。已发生的操作请查看任务记录。', 'state')
-                elif role == 'B':
-                    if action == 'relay':
-                        relayed = append_message(current, 'B', '转交 A：' + msg['text'] + '\nB 建议：' + parsed['message'],
-                                                 'relay', origin='B', target='A', user_message=msg['id'])
-                        if current['phase'] not in FINISHED:
-                            current['pending'].append(relayed['id'])
-                        else:
-                            append_message(current, 'system', '补审发现已记录。请用户在 A 端决定是否继续修复；原完成记录保留。', 'state')
-                elif (current.get('confirmed') and brief == current['confirmed'] and action in ('continue', 'advice')
-                      and current['phase'] not in FINISHED + ('conflict',)):
-                    # Clear a message-induced hold only. A manual pause is preserved.
-                    current['error'] = ''
+                already_applied=bool(prior_result and any(m.get('attempt')==previous['id'] and m.get('speaker')==role for m in current['messages']))
+                if already_applied:
+                    current['pending']=[i for i in current['pending'] if i!=msg['id']]
+                    current['error']=''
+                    if current['phase']=='chat_interrupted':current['phase']=current.get('paused_from','clarifying')
                 else:
-                    current['brief'] = brief
-                    current['error'] = ''
-                    current['phase'] = 'awaiting_confirmation' if parsed['ready'] and brief['acceptance'] else 'clarifying'
-                    if current['phase'] == 'awaiting_confirmation':
-                        append_message(current, 'A', brief_text(brief) + '\n\n回复“开始”后执行；也可以继续补充或修改。', 'brief')
+                    if current['phase'] == 'cancelled':
+                        return
+                    append_message(current, role, parsed['message'], 'clarification' if role == 'A' else 'supplement',
+                                   thread_id=thread, attempt=attempt_id)
+                    current.pop('live', None)
+                    current['pending'] = [i for i in current['pending'] if i != msg['id']]
+                    action = parsed['action']
+                    if action == 'conflict':
+                        current['phase'] = 'conflict'
+                        append_message(current, 'system', '检测到要求冲突，后续步骤暂停；请在 A 端明确裁决。已发生的操作请查看任务记录。', 'state')
+                    elif role == 'B':
+                        if action == 'relay':
+                            relayed = append_message(current, 'B', '转交 A：' + msg['text'] + '\nB 建议：' + parsed['message'],
+                                                     'relay', origin='B', target='A', user_message=msg['id'])
+                            if current['phase'] not in FINISHED:
+                                current['pending'].append(relayed['id'])
+                            else:
+                                append_message(current, 'system', '补审发现已记录。请用户在 A 端决定是否继续修复；原完成记录保留。', 'state')
+                    elif (current.get('confirmed') and brief == current['confirmed'] and action in ('continue', 'advice')
+                          and current['phase'] not in FINISHED + ('conflict',)):
+                        # Clear a message-induced hold only. A manual pause is preserved.
+                        current['error'] = ''
+                    else:
+                        current['brief'] = brief
+                        current['error'] = ''
+                        current['phase'] = 'awaiting_confirmation' if parsed['ready'] and brief['acceptance'] else 'clarifying'
+                        if current['phase'] == 'awaiting_confirmation':
+                            append_message(current, 'A', brief_text(brief) + '\n\n回复“开始”后执行；也可以继续补充或修改。', 'brief')
             attempt['status'] = 'completed'; self._save_chat_attempt(identifier, attempt)
         except Exception as error:
             state=attempt['status']
@@ -857,32 +873,43 @@ class UnifiedWorkflow:
                 prompt += '\n用户明确要求继续未完成步骤，先核对原会话进度，不重复已经完成的操作。'
             prompt += self.node_input_prompt(step)
             context_receipt = self._check_context_prompt(self.conversations.get(meta['conversation']), prompt, '节点 ' + role + ' 正式 ' + phase)
+            recovery=meta.get('recovery',{})
+            prior_result=None
+            if recovery.get('parent_id') and recovery.get('index')==request['index']:
+                old_call=self.box.get(recovery['parent_id'],'call-'+step+'.json',{}) or {}
+                prior_result=self._load_received_result(recovery['parent_id'],step,old_call.get('status')=='result_received')
             with self.box.lifecycle(job):
                 self.box.ensure_open(job)
                 if not self.box.claim(job, step):
                     raise RuntimeError('步骤已领取但结果未发布，禁止自动重发')
-            self.client.start(); self.client.pump = self._pump
-            recovery = meta.get('recovery',{})
-            old = self.box.get(recovery['parent_id'], 'call-'+step+'.json', {}) if recovery.get('index') == request['index'] else {}
-            if old.get('thread_id'):
-                if old.get('host') != socket.gethostname():
-                    raise ValueError('原会话不属于当前电脑')
-                thread = self.client.scoped_thread(settings,cwd,instructions,resume_thread=old['thread_id'])
+            if prior_result is not None:
+                self.client.close()
+                result=copy.deepcopy(prior_result['result'])
+                self.box.put(job,'reused-'+step+'.json',dict(parent_id=recovery['parent_id'],step=step,
+                    source_sha256=prior_result['sha256'],new_model_requests=0,time=now()))
             else:
-                thread = self.client.new_thread(settings,cwd,instructions)
-            self._wait_unpaused(request['index'])
-            ledger = dict(job_id=job, role=role, step=step, phase=phase, thread_id=thread,
-                          host=socket.gethostname(), time=now(), status='send_pending', prompt_sha256=fingerprint(prompt), context_view=context_receipt)
-            self.box.put(job,'session-'+role+'.json',dict(thread_id=thread,host=socket.gethostname(),role=role))
-            self._commit_node_inputs(step, ledger)
-            try:
-                result=self.client.run_turn(thread,prompt,role,step,settings,
-                    lambda v:self._stream(v,request['index'],job),self._pump)
-            except Exception as error:
-                ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent',error=str(error));self.box.put(job,'call-'+step+'.json',ledger)
-                raise
-            self._cache_received_result(job,step,result)
-            ledger['status']='result_received'; self.box.put(job,'call-'+step+'.json',ledger)
+                self.client.start(); self.client.pump = self._pump
+                recovery = meta.get('recovery',{})
+                old = self.box.get(recovery['parent_id'], 'call-'+step+'.json', {}) if recovery.get('index') == request['index'] else {}
+                if old.get('thread_id'):
+                    if old.get('host') != socket.gethostname():
+                        raise ValueError('原会话不属于当前电脑')
+                    thread = self.client.scoped_thread(settings,cwd,instructions,resume_thread=old['thread_id'])
+                else:
+                    thread = self.client.new_thread(settings,cwd,instructions)
+                self._wait_unpaused(request['index'])
+                ledger = dict(job_id=job, role=role, step=step, phase=phase, thread_id=thread,
+                              host=socket.gethostname(), time=now(), status='send_pending', prompt_sha256=fingerprint(prompt), context_view=context_receipt)
+                self.box.put(job,'session-'+role+'.json',dict(thread_id=thread,host=socket.gethostname(),role=role))
+                self._commit_node_inputs(step, ledger)
+                try:
+                    result=self.client.run_turn(thread,prompt,role,step,settings,
+                        lambda v:self._stream(v,request['index'],job),self._pump)
+                except Exception as error:
+                    ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent',error=str(error));self.box.put(job,'call-'+step+'.json',ledger)
+                    raise
+                self._cache_received_result(job,step,result)
+                ledger['status']='result_received'; self.box.put(job,'call-'+step+'.json',ledger)
             result.update(job_id=job,index=request['index'],phase=phase,revision=request['revision'],updated=now())
             if phase == 'review':
                 review=json.loads(result['answer'])

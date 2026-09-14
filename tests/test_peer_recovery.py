@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """0.3.19 peer interruption and explicit recovery; local services and subprocess mocks only."""
 import copy
 import json
@@ -48,9 +49,9 @@ class PeerComponents(RepairComponentTests):
     def test_no_late_error_overwrites_user_stop(self):
         meta=self.ready();self.node.active=meta
         self.node._edit_control(meta['id'],'cancel','')
-        before=(self.box.job(meta['id'])/'state.json').read_bytes()
+        before=(fs(self.box.job(meta['id'])/'state.json')).read_bytes()
         self.node._failed(TechnicalInterruption('late peer failure',{'kind':'peer_unavailable'}))
-        self.assertEqual((self.box.job(meta['id'])/'state.json').read_bytes(),before)
+        self.assertEqual((fs(self.box.job(meta['id'])/'state.json')).read_bytes(),before)
 
 
 class PeerRecovery(ConversationTests):
@@ -61,21 +62,21 @@ class PeerRecovery(ConversationTests):
             raise TechnicalInterruption('节点 B 暂停执行：合成心跳失效',
                                         {'origin':'B','peer':'A','code':'peer_heartbeat_stale','heartbeat_age_seconds':13})
         b._perform_code_owned=fail
-        project=self.root/'source';project.mkdir();(project/'main.py').write_text('print(1)',encoding='utf-8')
+        project=self.root/'source';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)',encoding='utf-8')
         self.ready('只读审查，不改代码\n'+str(project));self.send('开始')
         until(lambda:self.phase()=='interrupted',40)
         until(lambda:not b.active)
         b._perform_code_owned=original
         parent=self.shared/'jobs'/self.conv()['job']
         self.assertEqual(len(self.calls('B')),0)
-        self.assertFalse((parent/'001-B.claim').exists())
+        self.assertFalse((fs(parent/'001-B.claim')).exists())
         self.assertEqual(read_json(parent/'state.json')['status'],'failed')
         if legacy:
             error=LEGACY_PREFIX+LEGACY_REASONS[0]
             atomic_json(parent/'B-error.json',dict(status='cancelled',message=error,time=time.time()))
             atomic_json(parent/'state.json',dict(status='cancelled',index=1,error=error,updated=time.time()))
             with self.nodes['A'].conversations.edit(self.conv()['id']) as c:c.update(phase='interrupted',error=error)
-        before={name:(parent/name).read_bytes() for name in ('state.json','B-error.json','turn-000-A.json')}
+        before={name:(fs(parent/name)).read_bytes() for name in ('state.json','B-error.json','turn-000-A.json')}
         return parent,before
 
     def assert_resumed(self,parent,before):
@@ -85,7 +86,7 @@ class PeerRecovery(ConversationTests):
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[3,1], 'A clarify+initial+summary; B review once')
         self.assertEqual(self.conv()['completed_rounds'],1)
         self.assertEqual(len(self.conv()['jobs']),2)
-        for name,raw in before.items():self.assertEqual((parent/name).read_bytes(),raw,name)
+        for name,raw in before.items():self.assertEqual((fs(parent/name)).read_bytes(),raw,name)
         child=self.shared/'jobs'/self.conv()['job']
         self.assertEqual(read_json(child/'turn-000-A.json')['inherited_from']['job_id'],parent.name)
         self.assertEqual(read_json(child/'meta.json')['recovery']['index'],1)
@@ -113,7 +114,7 @@ class PeerRecovery(ConversationTests):
         self.assertEqual(self.phase(),'cancelled')
         self.assertEqual(len(self.conv()['jobs']),1)
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[2,0])
-        self.assertFalse((parent/'recovery-child.json').exists())
+        self.assertFalse((fs(parent/'recovery-child.json')).exists())
 
     def test_peer_legacy_requires_matching_error_and_control_proof(self):
         parent,_=self.fail_B_before_claim(legacy=True);box=self.nodes['A'].box;meta=read_json(parent/'meta.json')
@@ -148,7 +149,7 @@ class PeerRecovery(ConversationTests):
                 raise TechnicalInterruption('模拟 B 请求发送后心跳失效',{'origin':'B','peer':'A','code':'peer_heartbeat_stale'})
             return view
         b.client.run_turn=fail_after_result
-        project=self.root/'source';project.mkdir();(project/'main.py').write_text('print(1)')
+        project=self.root/'source';fs(project).mkdir();(fs(project/'main.py')).write_text('print(1)')
         self.ready('只读审查\n'+str(project));self.send('开始')
         until(lambda:self.phase()=='interrupted',40)
         parent=self.shared/'jobs'/self.conv()['job']

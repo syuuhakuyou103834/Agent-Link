@@ -1,3 +1,5 @@
+from fixture_paths import FixtureTemporaryDirectory
+from fixture_paths import fs, entries
 import json,os,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -10,12 +12,12 @@ from app.projects import FEATURE
 
 class RuntimeComponentTests(unittest.TestCase):
  def setUp(self):
-  self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
-  self.exe=self.root/'codex.exe';self.exe.write_bytes(b'fixture')
+  self.tmp=FixtureTemporaryDirectory();self.root=Path(self.tmp.name)
+  self.exe=self.root/'codex.exe';fs(self.exe).write_bytes(b'fixture')
   self.command=[str(self.exe),'app-server']
  def tearDown(self):self.tmp.cleanup()
  def complete(self):
-  for n in COMPANIONS:(self.root/n).write_bytes(b'fixture')
+  for n in COMPANIONS:(fs(self.root/n)).write_bytes(b'fixture')
  def test_missing_component_names_and_block_before_rpc(self):
   self.assertEqual(runtime_status(self.command)['missing'],list(COMPANIONS))
   c=RpcClient(self.command,self.root);sent=[];c.call=lambda *a,**kw:sent.append(a)
@@ -25,9 +27,9 @@ class RuntimeComponentTests(unittest.TestCase):
  def test_complete_runtime_passes_and_each_missing_helper_blocks(self):
   self.complete();self.assertTrue(require_project_runtime(self.command)['ready'])
   for n in COMPANIONS:
-   p=self.root/n;p.unlink()
+   p=self.root/n;fs(p).unlink()
    self.assertEqual(runtime_status(self.command)['missing'],[n])
-   p.write_bytes(b'fixture')
+   fs(p).write_bytes(b'fixture')
  def test_path_is_child_only_and_correct_directory_precedes_inherited(self):
   with patch.dict(os.environ,{'PATH':r'C:\stale-runtime'}):
    before=dict(os.environ);e=runtime_environment(self.command)

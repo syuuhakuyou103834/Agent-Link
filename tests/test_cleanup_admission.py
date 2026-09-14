@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Cleanup failure owns a shared execution lease until verified disconnect."""
 import json
 from pathlib import Path
@@ -42,12 +43,12 @@ class CleanupAdmission(SystemTests):
             for lease in ('execution.lease',f'nodes/{failing_role}.lease'):
                 with self.assertRaises(RuntimeError):FileLock(self.shared/lease).acquire()
             self.assertTrue(target.execution_lock)
-            before_jobs=len(list((self.shared/'jobs').iterdir()))
+            before_jobs=len(list(entries(self.shared/'jobs','iterdir')))
             for role in ('A','B'):
                 start=len(self.events[role])
                 self.nodes[role].command('start',topic='must reject',rounds=1)
                 until(lambda r=role,s=start:any(k=='error' and ('清理' if r=='A' else '只有 A') in v['message'] for k,v in self.events[r][s:]))
-                self.assertEqual(len(list((self.shared/'jobs').iterdir())),before_jobs)
+                self.assertEqual(len(list(entries(self.shared/'jobs','iterdir'))),before_jobs)
             self.assertEqual([len(self.calls(r)) for r in ('A','B')],counts)
             # Disconnect fails too, preserving the client, node role lease and execution lease.
             start=len(calls)
@@ -70,7 +71,7 @@ class CleanupAdmission(SystemTests):
         until(lambda:self.state()=='completed')
         until(lambda:all(not n.active for n in self.nodes.values()))
         self.assertEqual([len(self.calls(r)) for r in ('A','B')],[counts[0]+2,counts[1]+1])
-        (self.root/'cleanup-admission-result.json').write_text(json.dumps({
+        (fs(self.root/'cleanup-admission-result.json')).write_text(json.dumps({
             'failing_role':failing_role,'old_counts':counts,'new_counts':[2,1],
             'old_server_pid':old_process.pid,'old_server_alive_after_failed_cleanup':True,
             'old_server_exited_after_retry':True,'shared_execution_lease_retained':True,

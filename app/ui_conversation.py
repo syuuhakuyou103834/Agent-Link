@@ -28,6 +28,7 @@ class MainWindow(W.QMainWindow):
         self.conversation=None; self.snapshot={'meta':{},'turns':[],'live':[]}
         self.input_pending=False
         self.issues_pending=False
+        self.export_writer=None
         self.setWindowTitle('AgentLink '+__version__+' · 双机协作')
         self.resize(1380,940); self.setMinimumSize(1000,720); self.setStyleSheet(STYLE)
         self.bridge=Bridge();self.bridge.event.connect(self.receive)
@@ -169,6 +170,12 @@ class MainWindow(W.QMainWindow):
             self.issues_pending=False
             project=(self.conversation or {}).get('job_meta',{}).get('project')
             if project and project['id']==value['project']:self.choose_issue_status(value['project'],value['issues'])
+        elif kind=='export_result':
+            if value['error']:W.QMessageBox.warning(self,'保存失败',value['error'])
+            else:self.statusBar().showMessage('已保存：'+value['path'])
+        elif kind=='detail_log_health':
+            if value.get('write_failures') or value.get('dropped_events'):
+                self.statusBar().showMessage('详细错误日志未完整保存；写入失败 '+str(value.get('write_failures',0))+' 次，丢弃 '+str(value.get('dropped_events',0))+' 条。原业务错误仍显示在界面。')
         elif kind=='diagnostic_health':
             if value.get('last_error_type') or value.get('dropped_events'):
                 self.statusBar().showMessage('运行诊断有写入失败或丢失事件；任务状态请结合界面与原始记录核查。')
@@ -325,8 +332,10 @@ class MainWindow(W.QMainWindow):
         if path:self.save_text(path,self.report())
 
     def save_text(self,path,text):
-        try:Path(path).write_text(text,encoding='utf-8-sig');self.statusBar().showMessage('已保存：'+path)
-        except OSError as error:W.QMessageBox.warning(self,'保存失败',str(error))
+        from .file_output import ExportWriter
+        if self.export_writer is None:self.export_writer=ExportWriter(self.bridge.event.emit)
+        if self.export_writer.submit(path,text):self.statusBar().showMessage('正在保存：'+path)
+        else:W.QMessageBox.warning(self,'保存未排队','已有导出正在保存，请稍后重试。')
 
     def copy_session(self):
         records=self.all_turns()
@@ -350,6 +359,11 @@ class MainWindow(W.QMainWindow):
         if ok:self.service.command('issue_status',project=project,issue_id=next(i['id'] for i in issues if i['description']==choice),status=status)
 
     def closeEvent(self,event):
+        if self.export_writer is not None:
+            self.export_writer.close()
+            if self.export_writer.thread.is_alive():
+                event.ignore();self.statusBar().showMessage('正在完成已确认的导出，请稍候。')
+                QtCore.QTimer.singleShot(200,self.close);return
         if not self.service.thread.is_alive():event.accept();return
         event.ignore()
         if not self.closing:

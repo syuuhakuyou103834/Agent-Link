@@ -306,18 +306,20 @@ class ReviewWorkflow(ProjectRecovery):
             settings['output_schema'] = FINAL_SCHEMA
         scope = {'phase': phase, 'source': str(source), 'scratch': str(scratch),
                  'snapshot': receipt, 'permissions': settings['permission_profile']}
+        def result_context():
+            from .context_view import digest
+            return dict(source_sha256=digest(artifacts.inventory(source,self._transfer_pump)),phase=phase,
+                        revision=revision,brief_sha256=digest(self.active.get('task_brief',{})))
+        prior=None
         if restored:
             parent=self.active['recovery']['parent_id']
-            cached=self.data/'received-results'/parent/step/'result.json'
-            prior=read_json(cached)
+            old_call=self.box.get(parent,'call-'+step+'.json',{}) or {}
+            prior=self._load_received_result(parent,step,old_call.get('status')=='result_received')
             if prior is not None:
-                from .context_view import digest
-                if (prior.get('job_id')!=parent or prior.get('step')!=step or prior.get('host')!=socket.gethostname()
-                        or prior.get('sha256')!=digest(prior.get('result'))):
-                    raise ValueError('原请求本机返回缓存的归属或摘要无效')
-                settings['permission_profile']['filesystem'][str(cached.parent.resolve())]='read'
-                scope['previous_received_result']=str(cached)
-                scope['previous_received_note']='原请求已返回，先核查此原始结果和现有文件，不重复已完成操作；该缓存尚不代表交付验证通过。'
+                if prior.get('context')!=result_context():
+                    raise ValueError('原结果缺少匹配的源码/权限关联证明，不能自动发布；原件保留，请核查')
+                scope['previous_received_result']=prior['cache_path']
+                scope['previous_received_note']='原结果已返回；仅恢复本机核验与发布，不重新发送模型请求。'
         if role == 'B':
             original=artifacts.received_package(Path(binding['directory'])/job,receipt)
             settings['permission_profile']['filesystem'][str(original.resolve())]='read'
@@ -370,39 +372,47 @@ class ReviewWorkflow(ProjectRecovery):
                 raise RuntimeError('步骤已领取，禁止重复请求')
         atomic_json(self.box.cache(job) / (step + '-scope.json'), scope)
         self.emit('project_scope', scope)
-        self.client.start(); self.client.pump = self._pump
-        try:
-            thread = (self.client.scoped_thread(settings,str(scratch),instructions,resume_thread=restored['thread'])
-                      if restored and restored['thread'] else self.client.new_thread(settings, str(scratch), instructions))
-        except Exception as error:
-            raise RuntimeError('项目权限预检阻塞（本步骤未发送模型请求）：' + str(error)) from error
-        self.box.put(job, 'session-' + role + '.json', {'thread_id': thread, 'host': socket.gethostname(), 'role': role})
-        self._wait_unpaused(index); self._pump(); self._check_job_instances(self.active)
-        ledger = dict(job_id=job, step=step, role=role, phase=phase, attempt=1, thread_id=thread,
-                      status='send_pending', prompt_sha256=hashlib.sha256(prompt.encode('utf-8')).hexdigest(), time=now())
-        if context_receipt:
-            ledger['context_view'] = context_receipt
-        self._commit_node_inputs(step, ledger)
-        self.execution_stage = 'model_running'
-        try:
-            view = self.client.run_turn(thread, prompt, role, step, settings,
-                                       lambda value: self._stream(dict(value, phase=phase), index, job), self._pump)
-        except Exception as error:
-            ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent', error=str(error), time=now())
-            self.box.put(job,'call-'+step+'.json',ledger)
-            partial=getattr(self.client,'last_partial',None)
-            if partial:
-                partial.update(index=index,job_id=job,phase=phase,revision=revision,host=socket.gethostname(),updated=now())
-                self.box.put(job,'live-'+role+'.json',partial)
-            raise
-        self._cache_received_result(job,step,view)
-        ledger.update(status='result_received', time=now()); self.box.put(job, 'call-' + step + '.json', ledger)
-        self.execution_stage = 'closing_model_process'
-        self.client.pump = self._pump
-        # End the execution process before advancing ownership to the peer.
-        self.client.close()
-        self.client.start()
-        self.client.pump = self._pump
+        if prior is not None:
+            self.client.close()
+            import copy
+            view=copy.deepcopy(prior['result'])
+            self.box.put(job,'reused-'+step+'.json',dict(parent_id=parent,step=step,
+                source_sha256=prior['sha256'],status='result_received',new_model_requests=0,time=now()))
+            self._trace('result_reused',step=step,request_state='result_received')
+        else:
+            self.client.start(); self.client.pump = self._pump
+            try:
+                thread = (self.client.scoped_thread(settings,str(scratch),instructions,resume_thread=restored['thread'])
+                          if restored and restored['thread'] else self.client.new_thread(settings, str(scratch), instructions))
+            except Exception as error:
+                raise RuntimeError('项目权限预检阻塞（本步骤未发送模型请求）：' + str(error)) from error
+            self.box.put(job, 'session-' + role + '.json', {'thread_id': thread, 'host': socket.gethostname(), 'role': role})
+            self._wait_unpaused(index); self._pump(); self._check_job_instances(self.active)
+            ledger = dict(job_id=job, step=step, role=role, phase=phase, attempt=1, thread_id=thread,
+                          status='send_pending', prompt_sha256=hashlib.sha256(prompt.encode('utf-8')).hexdigest(), time=now())
+            if context_receipt:
+                ledger['context_view'] = context_receipt
+            self._commit_node_inputs(step, ledger)
+            self.execution_stage = 'model_running'
+            try:
+                view = self.client.run_turn(thread, prompt, role, step, settings,
+                                           lambda value: self._stream(dict(value, phase=phase), index, job), self._pump)
+            except Exception as error:
+                ledger.update(status='interrupted_uncertain' if getattr(self.client, 'turn_send_started', True) else 'not_sent', error=str(error), time=now())
+                self.box.put(job,'call-'+step+'.json',ledger)
+                partial=getattr(self.client,'last_partial',None)
+                if partial:
+                    partial.update(index=index,job_id=job,phase=phase,revision=revision,host=socket.gethostname(),updated=now())
+                    self.box.put(job,'live-'+role+'.json',partial)
+                raise
+            self._cache_received_result(job,step,view,context_probe=result_context)
+            ledger.update(status='result_received', time=now()); self.box.put(job, 'call-' + step + '.json', ledger)
+            self.execution_stage = 'closing_model_process'
+            self.client.pump = self._pump
+            # End the execution process before advancing ownership to the peer.
+            self.client.close()
+            self.client.start()
+            self.client.pump = self._pump
         view.update(index=index, job_id=job, phase=phase, revision=revision, updated=now(), host=socket.gethostname())
         self.execution_stage = 'publishing_result'
         if phase == 'implement':

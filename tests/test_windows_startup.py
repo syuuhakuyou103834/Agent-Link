@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Verify the actual Windows Qt platform plugin without showing a window to the user."""
 import os
 os.environ['QT_QPA_PLATFORM'] = 'windows'
@@ -11,7 +12,7 @@ from app.storage import Settings
 app = W.QApplication([])
 app.setStyle('Fusion')
 root = __import__('fixture_paths').output_root() / 'windows-plugin'
-root.mkdir(parents=True, exist_ok=True)
+fs(root).mkdir(parents=True, exist_ok=True)
 window = MainWindow(Settings(auto_connect=False), root, start_service=False)
 window.move(-32000, -32000)
 window.show()

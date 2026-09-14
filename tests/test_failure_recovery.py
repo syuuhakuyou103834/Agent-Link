@@ -1,3 +1,4 @@
+from fixture_paths import fs, entries
 """Fixed failure-recovery baseline; local services and offline model processes."""
 import ctypes
 from ctypes import wintypes
@@ -41,7 +42,7 @@ class FailureRecovery(SystemTests):
         if hasattr(self, 'recovery_result'):
             self.recovery_result['all_known_mock_processes_exited'] = True
             self.recovery_result['role_locks_reacquired_after_disconnect'] = True
-            (self.root / 'recovery-result.json').write_text(json.dumps(self.recovery_result, indent=2), encoding='utf-8')
+            (fs(self.root / 'recovery-result.json')).write_text(json.dumps(self.recovery_result, indent=2), encoding='utf-8')
 
     def test_T07_T11_T12_repeated_failures_then_valid_next_job(self):
         self.known_processes = []
@@ -51,11 +52,11 @@ class FailureRecovery(SystemTests):
             'normal_jobs_after_every_failure': 1,
             'threshold': .20, 'comparison': 'first/last 3 measured pair medians',
             'resource_scope': 'two service threads in harness plus current mock child processes'}
-        (self.root / 'recovery-baseline.json').write_text(json.dumps(spec, indent=2), encoding='utf-8')
+        (fs(self.root / 'recovery-baseline.json')).write_text(json.dumps(spec, indent=2), encoding='utf-8')
         for pair, mode in enumerate(spec['fault_order']):
             a = self.nodes['A']
             base_calls = sum(len(self.calls(r)) for r in ('A','B'))
-            previous_ids = {p.name for p in (self.shared / 'jobs').iterdir()}
+            previous_ids = {p.name for p in entries(self.shared / 'jobs','iterdir')}
             original_publish = storage.atomic_json
             denied = []
             def publish(path, value):
@@ -73,7 +74,7 @@ class FailureRecovery(SystemTests):
                 if mode == 'cancel':
                     a.command('cancel')
                 until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
-            failed = next(p for p in (self.shared / 'jobs').iterdir() if p.name not in previous_ids)
+            failed = next(p for p in entries(self.shared / 'jobs','iterdir') if p.name not in previous_ids)
             expected = 'cancelled' if mode == 'cancel' else 'failed'
             self.assertEqual(read_json(failed / 'state.json')['status'], expected)
             self.assertEqual(sum(len(self.calls(r)) for r in ('A','B')) - base_calls, 1)
@@ -84,15 +85,15 @@ class FailureRecovery(SystemTests):
                 pass
             self.assertTrue(all(not n.sessions for n in self.nodes.values()))
             self.assertTrue(all(n.client.current is None for n in self.nodes.values()))
-            terminal = (failed / 'state.json').read_bytes()
-            prior_ids = {p.name for p in (self.shared / 'jobs').iterdir()}
+            terminal = (fs(failed / 'state.json')).read_bytes()
+            prior_ids = {p.name for p in entries(self.shared / 'jobs','iterdir')}
             a.command('start', topic='valid recovery ' + str(pair), rounds=1)
             until(lambda: all(not n.active and not n.start_pending for n in self.nodes.values()))
-            completed = next(p for p in (self.shared / 'jobs').iterdir() if p.name not in prior_ids)
+            completed = next(p for p in entries(self.shared / 'jobs','iterdir') if p.name not in prior_ids)
             self.assertEqual(read_json(completed / 'state.json')['status'], 'completed')
             self.assertEqual(sum(len(self.calls(r)) for r in ('A','B')) - base_calls, 4)
-            self.assertEqual((failed / 'state.json').read_bytes(), terminal)
-            self.assertEqual(len(list(completed.glob('turn-*.json'))), 3)
+            self.assertEqual((fs(failed / 'state.json')).read_bytes(), terminal)
+            self.assertEqual(len(list(entries(completed,'glob','turn-*.json'))), 3)
             current = [n.client.process for n in self.nodes.values()]
             for process in current:
                 if process not in self.known_processes:
@@ -118,7 +119,7 @@ class FailureRecovery(SystemTests):
                 'service_thread_host_pid':__import__('os').getpid(),
                 'discussion_lease_reacquired_before_next_job':True,
                 'old_rpc_turn_finished_before_next_job':True})
-            (self.root / 'recovery-samples.json').write_text(json.dumps(samples, indent=2), encoding='utf-8')
+            (fs(self.root / 'recovery-samples.json')).write_text(json.dumps(samples, indent=2), encoding='utf-8')
         growth = {}
         for key in ('private_bytes','handles'):
             first = statistics.median(s[key] for s in samples[3:6])
